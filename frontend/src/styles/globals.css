@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-color: #f8faf6;
+  color: #0f1e17;
+}
+
+::selection {
+  background: rgba(30, 122, 70, 0.2);
+}
+
+@layer components {
+  .glass-panel {
+    @apply rounded-3xl border border-white/60 bg-white/70 shadow-xl shadow-emerald-200/40 backdrop-blur;
+  }
+
+  .section-grid {
+    @apply grid gap-6 md:grid-cols-2;
+  }
+}
+

@@ -1,0 +1,31 @@
+version: '3.9'
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: gh-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - '9090:9090'
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: gh-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - '3001:3000'
+    depends_on:
+      - prometheus
+
+volumes:
+  grafana-data:
+
+
+
