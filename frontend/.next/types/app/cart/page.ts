@@ -1,8 +1,8 @@
-// File: C:\Users\Kalle\greenharvest\frontend\src\app\farmer\portal\page.tsx
-import * as entry from '../../../../../src/app/farmer/portal/page.js'
+// File: C:\Users\Kalle\greenharvest\frontend\src\app\cart\page.tsx
+import * as entry from '../../../../src/app/cart/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
-type TEntry = typeof import('../../../../../src/app/farmer/portal/page.js')
+type TEntry = typeof import('../../../../src/app/cart/page.js')
 
 type SegmentParams<T extends Object = any> = T extends Record<string, any>
   ? { [K in keyof T]: T[K] extends string ? string | string[] | undefined : never }
