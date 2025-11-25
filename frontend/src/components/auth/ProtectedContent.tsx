@@ -45,3 +45,4 @@ export default function ProtectedContent({ allowedRoles, children }: Props) {
   );
 }
 
+

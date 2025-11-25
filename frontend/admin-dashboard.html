@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GreenHarvest Admin Dashboard</title>
+    <style>
+      body {
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        background: #f7f4ed;
+        color: #1c1a17;
+        margin: 0;
+        display: flex;
+        min-height: 100vh;
+        align-items: center;
+        justify-content: center;
+      }
+      .panel {
+        max-width: 540px;
+        padding: 2.5rem;
+        border-radius: 1.5rem;
+        background: #fff;
+        box-shadow: 0 25px 65px rgba(19, 55, 25, 0.15);
+        text-align: center;
+      }
+      h1 {
+        margin-bottom: 0.5rem;
+        font-size: 1.75rem;
+      }
+      p {
+        margin: 0.75rem 0;
+        line-height: 1.6;
+        color: #4b453d;
+      }
+      a {
+        display: inline-flex;
+        margin-top: 1.25rem;
+        padding: 0.85rem 1.75rem;
+        border-radius: 999px;
+        background: #1d7a46;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      small {
+        display: block;
+        margin-top: 1rem;
+        color: #7a7268;
+        font-size: 0.8rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <h1>Admin dashboard moved</h1>
+      <p>
+        The static HTML dashboard has been replaced by the secure Next.js route
+        <code>/dashboard</code>. Please use the main site, sign in as an admin, and you will be
+        automatically redirected to the protected dashboard experience.
+      </p>
+      <a href="https://greenharvest.local/dashboard">Open dashboard</a>
+      <small>Only authenticated admin users can view the dashboard.</small>
+    </div>
+  </body>
+</html>
