@@ -1,39 +1,63 @@
-// backend/src/config/redis.js
-const { createClient } = require('redis');
-const config = require('./env');
+import Redis from 'ioredis';
+import { env } from './env.js';
 
-const redisUrl = config.redis.url;
-const redisClient = createClient({ url: redisUrl });
+// Lightweight in-memory Redis substitute for tests so we don't need extra deps.
+class FakeRedis {
+  constructor() {
+    this.store = new Map();
+    this.ttl = new Map();
+  }
 
-// Event listeners
-redisClient.on('error', (err) => {
-  console.error('❌ Redis Client Error:', err);
-});
-redisClient.on('connect', () => {
-  console.log('🔌 Redis client connecting...');
-});
-redisClient.on('ready', () => {
-  console.log('✅ Redis is ready');
-});
-redisClient.on('end', () => {
-  console.log('🔴 Redis connection closed');
-});
-
-async function connectRedis() {
-  try {
-    if (!redisClient.isOpen) {
-      console.log(`🔄 Connecting to Redis at ${redisUrl} ...`);
-      await redisClient.connect();
-    } else {
-      console.log('🔎 Redis client already open');
+  async set(key, value, mode, durationType, duration) {
+    if (mode === 'NX' && this.store.has(key)) {
+      return null;
     }
-  } catch (err) {
-    console.error('🔥 Failed to connect Redis:', err);
-    throw err;
+    this.store.set(key, value);
+    if (this.ttl.has(key)) {
+      clearTimeout(this.ttl.get(key));
+      this.ttl.delete(key);
+    }
+    if (durationType === 'EX' && typeof duration === 'number') {
+      const timer = setTimeout(() => {
+        this.store.delete(key);
+        this.ttl.delete(key);
+      }, duration * 1000);
+      timer.unref?.();
+      this.ttl.set(key, timer);
+    }
+    return 'OK';
+  }
+
+  async get(key) {
+    return this.store.get(key) ?? null;
+  }
+
+  async del(key) {
+    this.store.delete(key);
+    if (this.ttl.has(key)) {
+      clearTimeout(this.ttl.get(key));
+      this.ttl.delete(key);
+    }
+    return 1;
+  }
+
+  async ping() {
+    return 'PONG';
   }
 }
 
-module.exports = {
-  redisClient,
-  connectRedis,
-};
+const redis =
+  process.env.NODE_ENV === 'test'
+    ? new FakeRedis()
+    : new Redis(env.redisUrl, {
+        lazyConnect: true,
+      });
+
+if (redis instanceof Redis) {
+  redis.on('error', (err) => {
+    console.error('Redis connection error', err);
+  });
+}
+
+export { redis };
+

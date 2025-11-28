@@ -1,120 +1,46 @@
-// backend/src/models/Product.js
+import mongoose from 'mongoose';
 
-const mongoose = require('mongoose');
-const { PRODUCT_CATEGORIES, PRODUCT_UNITS, PRODUCT_STATUS } = require('../utils/constants');
-const { slugify } = require('../utils/helpers');
-
-const { Schema } = mongoose;
-
-const priceSchema = new Schema(
+const productSchema = new mongoose.Schema(
   {
-    amount: { type: Number, required: true, min: 0 },
-    currency: { type: String, default: 'USD' },
-    unit: { type: String, enum: PRODUCT_UNITS, required: true },
-    bulkTiers: [
-      {
-        minQuantity: Number,
-        maxQuantity: Number,
-        pricePerUnit: Number,
-      },
-    ],
-  },
-  { _id: false }
-);
-
-const mediaSchema = new Schema(
-  {
-    url: String,
-    thumbnailUrl: String,
-    alt: String,
-    isPrimary: { type: Boolean, default: false },
-    metadata: Schema.Types.Mixed,
-  },
-  { _id: false }
-);
-
-const traceabilitySchema = new Schema(
-  {
-    harvestDate: Date,
-    batchId: String,
-    lotNumber: String,
-    storageConditions: String,
-    labResultsUrl: String,
-  },
-  { _id: false }
-);
-
-const productSchema = new Schema(
-  {
-    farmer: { type: Schema.Types.ObjectId, ref: 'FarmerProfile', required: true },
-    name: { type: String, required: true, trim: true },
-    slug: { type: String, unique: true, trim: true },
-    sku: { type: String, trim: true, unique: true },
-    description: { type: String, trim: true },
-    category: { type: String, enum: PRODUCT_CATEGORIES, required: true },
-    tags: [{ type: String, trim: true }],
-    price: priceSchema,
-    status: {
-      type: String,
-      enum: Object.values(PRODUCT_STATUS),
-      default: PRODUCT_STATUS.ACTIVE,
-    },
-    attributes: {
-      variety: String,
-      grade: String,
-      packaging: String,
-      shelfLifeDays: Number,
-      organicCertification: String,
-    },
-    media: [mediaSchema],
-    traceability: traceabilitySchema,
+    name: { type: String, required: true },
+    description: { type: String, default: '' },
+    price: { type: Number, required: true },
+    stock: { type: Number, required: true },
+    imageUrl: { type: String },
+    gallery: [{ type: String }],
+    // Optional uploaded certification files (PDF/JPG/PNG, etc.)
     certifications: [
       {
-        type: String,
-        certificateId: String,
-        issuedBy: String,
-        validUntil: Date,
+        fileUrl: String,
+        fileName: String,
+        mimeType: String,
       },
     ],
-    inventory: {
-      totalQuantity: { type: Number, default: 0 },
-      reservedQuantity: { type: Number, default: 0 },
-      lowStockThreshold: { type: Number, default: 10 },
-      lastRestockedAt: Date,
+    certificationTags: [{ type: String }],
+    categories: [{ type: String }],
+    // Optional metadata such as variety, farming method, etc.
+    metadata: {
+      type: Map,
+      of: String,
+      default: undefined,
     },
-    visibility: {
-      searchable: { type: Boolean, default: true },
-      featured: { type: Boolean, default: false },
-      seasonal: { type: Boolean, default: false },
+    status: { type: String, enum: ['draft', 'published'], default: 'draft' },
+    farmer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    approvals: {
+      approvedByAdmin: { type: Boolean, default: false },
+      status: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending',
+      },
+      adminNote: { type: String },
+      reviewedAt: { type: Date },
+      reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     },
-    analytics: {
-      views: { type: Number, default: 0 },
-      favorites: { type: Number, default: 0 },
-      conversions: { type: Number, default: 0 },
-    },
-    metadata: Schema.Types.Mixed,
+    publishedAt: { type: Date },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-productSchema.pre('save', function setSlug(next) {
-  if (this.isModified('name') || this.isNew) {
-    this.slug = slugify(`${this.name}-${this._id || ''}`);
-  }
-  return next();
-});
-
-productSchema.virtual('availableQuantity').get(function availableQuantity() {
-  return Math.max(0, this.inventory.totalQuantity - this.inventory.reservedQuantity);
-});
-
-productSchema.index({ slug: 1 }, { unique: true });
-productSchema.index({ sku: 1 }, { unique: true, sparse: true });
-productSchema.index({ category: 1, status: 1 });
-productSchema.index({ tags: 1 });
-productSchema.index({ name: 'text', description: 'text', tags: 'text' });
-
-module.exports = mongoose.model('Product', productSchema);
+export const Product = mongoose.model('Product', productSchema);
 

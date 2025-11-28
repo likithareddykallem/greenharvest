@@ -1,22 +1,20 @@
-// backend/src/routes/orderRoutes.js
+import { Router } from 'express';
+import {
+  trackOrder,
+  markPacked,
+  updateOrderStatus,
+  listOrders,
+  listCustomerOrders,
+} from '../controllers/orderController.js';
+import { authenticate, authorize } from '../middlewares/auth.js';
 
-const express = require('express');
-const orderController = require('../controllers/orderController');
-const { protect, authorize } = require('../middleware/auth');
-const { validate } = require('../middleware/validation');
-const { USER_ROLES } = require('../utils/constants');
+const router = Router();
 
-const router = express.Router();
+router.get('/', authenticate, authorize('admin'), listOrders);
+router.get('/mine', authenticate, authorize('customer'), listCustomerOrders);
+router.get('/:id/track', authenticate, authorize('customer'), trackOrder);
+router.post('/:id/packed', authenticate, authorize('farmer'), markPacked);
+router.post('/:id/status', authenticate, authorize('admin', 'farmer'), updateOrderStatus);
 
-router.post('/', protect, validate('createOrder'), orderController.createOrder);
-router.get('/', protect, orderController.listOrders);
-router.get('/:id', protect, orderController.getOrder);
-router.patch(
-  '/:id/status',
-  protect,
-  authorize(USER_ROLES.FARMER, USER_ROLES.ADMIN),
-  orderController.updateOrderStatus
-);
-
-module.exports = router;
+export default router;
 

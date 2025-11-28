@@ -1,0 +1,67 @@
+{
+  "info": {
+    "name": "GreenHarvest",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Register",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{api}}/api/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Test\",\n  \"email\": \"test@example.com\",\n  \"password\": \"Secret123!\",\n  \"role\": \"customer\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "url": "{{api}}/api/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"Secret123!\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Products",
+      "request": {
+        "method": "GET",
+        "url": "{{api}}/api/products"
+      }
+    },
+    {
+      "name": "Create checkout",
+      "request": {
+        "method": "POST",
+        "url": "{{api}}/api/cart/checkout",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"items\": [{\"productId\": \"<id>\", \"quantity\": 1}]\n}"
+        }
+      }
+    },
+    {
+      "name": "Simulate payment",
+      "request": {
+        "method": "POST",
+        "url": "{{api}}/api/payments/simulate",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"checkoutId\": \"<id>\"\n}"
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "api",
+      "value": "http://localhost:4000"
+    }
+  ]
+}
+

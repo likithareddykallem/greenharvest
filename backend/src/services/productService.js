@@ -1,164 +1,131 @@
-// backend/src/services/productService.js
+import { Product } from '../models/Product.js';
 
-const mongoose = require('mongoose');
-const { Product, Inventory } = require('../models');
-const { paginate, getPaginationMeta } = require('../utils/helpers');
-const cache = require('../utils/cache');
-const { CACHE_TTL, PRODUCT_STATUS, USER_ROLES } = require('../utils/constants');
-
-const productCacheKey = (id) => `product:${id}`;
-
-const listProducts = async (filters = {}, pagination = {}) => {
-  const { skip, limit, page } = paginate(pagination.page, pagination.limit);
-  const query = {};
-
-  if (filters.category) query.category = filters.category;
-  if (filters.status) query.status = filters.status;
-  if (filters.farmer) query.farmer = filters.farmer;
-  if (filters.search) {
-    query.$text = { $search: filters.search };
-  }
-
+export const listProducts = async ({ page = 1, limit = 10 }) => {
+  const skip = (page - 1) * limit;
   const [items, total] = await Promise.all([
-    Product.find(query).populate('farmer').skip(skip).limit(limit).sort({ createdAt: -1 }),
-    Product.countDocuments(query),
+    Product.find({ 'approvals.approvedByAdmin': true, status: 'published' })
+      .populate('farmer', 'name')
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 }),
+    Product.countDocuments({ 'approvals.approvedByAdmin': true, status: 'published' }),
   ]);
-
   return {
     items,
-    meta: getPaginationMeta(total, page, limit),
+    total,
+    page,
+    pages: Math.ceil(total / limit) || 1,
   };
 };
 
-const getProductById = async (id) => {
-  return cache.remember(productCacheKey(id), CACHE_TTL.PRODUCT_DETAIL, async () => {
-    const product = await Product.findById(id).populate('farmer');
-    if (!product) {
-      const err = new Error('Product not found');
-      err.status = 404;
-      throw err;
-    }
-    return product;
+export const getProduct = async (id) => {
+  const product = await Product.findById(id).populate('farmer', 'name email');
+  if (!product) {
+    const err = new Error('Product not found');
+    err.status = 404;
+    throw err;
+  }
+  return product;
+};
+
+export const createProduct = async ({
+  name,
+  description,
+  price,
+  stock,
+  farmerId,
+  imageUrl,
+  certifications,
+  metadata,
+  categories,
+  certificationTags,
+  gallery,
+}) => {
+  const product = await Product.create({
+    name,
+    description,
+    price,
+    stock,
+    farmer: farmerId,
+    imageUrl,
+    status: 'published',
+    certifications,
+    metadata,
+    categories,
+    certificationTags,
+    gallery,
+    publishedAt: new Date(),
+    approvals: { approvedByAdmin: false, status: 'pending' },
   });
+  return product;
 };
 
-const createProduct = async (user, payload) => {
-  if (user.role !== USER_ROLES.FARMER || !user.profile) {
-    const err = new Error('Only farmers can create products');
-    err.status = 403;
-    throw err;
-  }
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const { inventory: inventoryInput, ...productInput } = payload;
-    const initialQuantity =
-      inventoryInput?.currentStock ?? inventoryInput?.totalQuantity ?? 0;
-    const lowStockThreshold = inventoryInput?.lowStockThreshold;
-
-    const product = await Product.create(
-      [
-        {
-          ...productInput,
-          inventory: {
-            totalQuantity: initialQuantity,
-            reservedQuantity: 0,
-            lowStockThreshold: lowStockThreshold ?? 10,
-            lastRestockedAt: new Date(),
-          },
-          farmer: user.profile,
-          status: payload.status || PRODUCT_STATUS.ACTIVE,
-        },
-      ],
-      { session }
-    );
-
-    await Inventory.create(
-      [
-        {
-          product: product[0]._id,
-          farmer: user.profile,
-          totalQuantity: initialQuantity,
-          reservedQuantity: 0,
-          lowStockThreshold: lowStockThreshold ?? 10,
-        },
-      ],
-      { session }
-    );
-
-    await session.commitTransaction();
-    await cache.del('products:list');
-    return Product.findById(product[0]._id).populate('farmer');
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
+export const approveProduct = async ({
+  productId,
+  status = 'approved',
+  adminNote,
+  reviewerId,
+}) => {
+  const isApproved = status === 'approved';
+  const update = {
+    $set: {
+      'approvals.approvedByAdmin': isApproved,
+      'approvals.status': status,
+      'approvals.adminNote': adminNote,
+      'approvals.reviewedAt': new Date(),
+      'approvals.reviewedBy': reviewerId,
+    },
+  };
+  const product = await Product.findByIdAndUpdate(productId, update, { new: true });
+  return product;
 };
 
-const updateProduct = async (id, user, payload) => {
-  const product = await Product.findById(id);
-  if (!product) {
-    const err = new Error('Product not found');
-    err.status = 404;
-    throw err;
-  }
-  if (user.role !== USER_ROLES.ADMIN && (!user.profile || product.farmer.toString() !== user.profile.toString())) {
-    const err = new Error('Not authorized to update this product');
-    err.status = 403;
-    throw err;
-  }
-
-  const { inventory: inventoryInput, ...productInput } = payload;
-  Object.assign(product, productInput);
-  if (inventoryInput) {
-    const inventory = await Inventory.findOne({ product: product._id });
-    if (inventory) {
-      if (typeof inventoryInput.currentStock === 'number' || typeof inventoryInput.totalQuantity === 'number') {
-        const totalQuantity =
-          typeof inventoryInput.currentStock === 'number'
-            ? inventoryInput.currentStock
-            : inventoryInput.totalQuantity;
-        inventory.totalQuantity = totalQuantity;
-        product.inventory.totalQuantity = totalQuantity;
-      }
-      if (typeof inventoryInput.lowStockThreshold === 'number') {
-        inventory.lowStockThreshold = inventoryInput.lowStockThreshold;
-        product.inventory.lowStockThreshold = inventoryInput.lowStockThreshold;
-      }
-      await inventory.save();
-    }
-  }
-  await product.save();
-  await cache.del(productCacheKey(id));
-  return product.populate('farmer');
+export const updateFarmerProduct = async (productId, farmerId, payload) => {
+  const {
+    name,
+    description,
+    price,
+    stock,
+    imageUrl,
+    certifications,
+    metadata,
+    categories,
+    certificationTags,
+    gallery,
+  } = payload;
+  const product = await Product.findOneAndUpdate(
+    { _id: productId, farmer: farmerId },
+    {
+      $set: {
+        ...(name !== undefined ? { name } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(price !== undefined ? { price } : {}),
+        ...(stock !== undefined ? { stock } : {}),
+        ...(imageUrl !== undefined ? { imageUrl } : {}),
+        ...(certifications !== undefined ? { certifications } : {}),
+        ...(metadata !== undefined ? { metadata } : {}),
+        ...(categories !== undefined ? { categories } : {}),
+        ...(certificationTags !== undefined ? { certificationTags } : {}),
+        ...(gallery !== undefined ? { gallery } : {}),
+      },
+    },
+    { new: true }
+  );
+  return product;
 };
 
-const deleteProduct = async (id, user) => {
-  const product = await Product.findById(id);
-  if (!product) {
-    const err = new Error('Product not found');
-    err.status = 404;
-    throw err;
-  }
-  if (user.role !== USER_ROLES.ADMIN && (!user.profile || product.farmer.toString() !== user.profile.toString())) {
-    const err = new Error('Not authorized to delete this product');
-    err.status = 403;
-    throw err;
-  }
-
-  await Inventory.deleteOne({ product: product._id });
-  await product.deleteOne();
-  await cache.del(productCacheKey(id));
-};
-
-module.exports = {
-  listProducts,
-  getProductById,
-  createProduct,
-  updateProduct,
-  deleteProduct,
+export const resubmitFarmerProduct = async (productId, farmerId) => {
+  const product = await Product.findOneAndUpdate(
+    { _id: productId, farmer: farmerId },
+    {
+      $set: {
+        'approvals.approvedByAdmin': false,
+        'approvals.status': 'pending',
+        'approvals.adminNote': undefined,
+      },
+    },
+    { new: true }
+  );
+  return product;
 };
 

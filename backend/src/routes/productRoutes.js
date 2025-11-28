@@ -1,37 +1,50 @@
-// backend/src/routes/productRoutes.js
+import { Router } from 'express';
+import {
+  getProducts,
+  getProductById,
+  createFarmerProduct,
+  approveFarmerProduct,
+  updateFarmerProductController,
+  resubmitFarmerProductController,
+  listTaxonomyPublic,
+} from '../controllers/productController.js';
+import { authenticate, authorize } from '../middlewares/auth.js';
+import { upload } from '../middlewares/upload.js';
 
-const express = require('express');
-const productController = require('../controllers/productController');
-const { validate } = require('../middleware/validation');
-const { protect, authorize } = require('../middleware/auth');
-const { USER_ROLES } = require('../utils/constants');
+const router = Router();
 
-const router = express.Router();
-
-router.get('/', productController.listProducts);
-router.get('/:id', productController.getProduct);
-
+router.get('/', getProducts);
+router.get('/taxonomy', listTaxonomyPublic);
+router.get('/:id', getProductById);
 router.post(
-  '/',
-  protect,
-  authorize(USER_ROLES.FARMER, USER_ROLES.ADMIN),
-  validate('createProduct'),
-  productController.createProduct
+  '/farmer',
+  authenticate,
+  authorize('farmer'),
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'certifications', maxCount: 5 },
+    { name: 'gallery', maxCount: 5 },
+  ]),
+  createFarmerProduct
 );
-
-router.put(
-  '/:id',
-  protect,
-  authorize(USER_ROLES.FARMER, USER_ROLES.ADMIN),
-  productController.updateProduct
+router.patch(
+  '/:id/farmer',
+  authenticate,
+  authorize('farmer'),
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'certifications', maxCount: 5 },
+    { name: 'gallery', maxCount: 5 },
+  ]),
+  updateFarmerProductController
 );
-
-router.delete(
-  '/:id',
-  protect,
-  authorize(USER_ROLES.FARMER, USER_ROLES.ADMIN),
-  productController.deleteProduct
+router.post(
+  '/:id/resubmit',
+  authenticate,
+  authorize('farmer'),
+  resubmitFarmerProductController
 );
+router.post('/:id/approve', authenticate, authorize('admin'), approveFarmerProduct);
 
-module.exports = router;
+export default router;
 

@@ -1,0 +1,14 @@
+{
+  "name": "greenharvest-monorepo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "node seed/index.js"
+  }
+}
+
+
+
+
+
+

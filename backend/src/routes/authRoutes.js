@@ -1,18 +1,12 @@
-// backend/src/routes/authRoutes.js
+import { Router } from 'express';
+import { register, login, refresh } from '../controllers/authController.js';
+import { loginLimiter } from '../middlewares/loginLimiter.js';
 
-const express = require('express');
-const authController = require('../controllers/authController');
-const { validate } = require('../middleware/validation');
-const { authLimiter } = require('../middleware/rateLimiter');
-const { protect } = require('../middleware/auth');
+const router = Router();
 
-const router = express.Router();
+router.post('/register', register);
+router.post('/login', loginLimiter, login);
+router.post('/refresh', refresh);
 
-router.post('/register', authLimiter, validate('register'), authController.register);
-router.post('/login', authLimiter, validate('login'), authController.login);
-router.post('/refresh', authLimiter, validate('refresh'), authController.refresh);
-router.post('/logout', protect, authController.logout);
-router.get('/me', protect, authController.profile);
-
-module.exports = router;
+export default router;
 

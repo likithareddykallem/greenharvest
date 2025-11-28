@@ -1,32 +1,35 @@
-// backend/src/controllers/authController.js
+import { registerUser, loginUser, refreshTokens } from '../services/authService.js';
+import { catchAsync } from '../utils/catchAsync.js';
 
-const authService = require('../services/authService');
-const { asyncHandler } = require('../middleware/errorHandler');
-const response = require('../utils/apiResponse');
+const setRefreshCookie = (res, token) => {
+  res.cookie('refreshToken', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+};
 
-exports.register = asyncHandler(async (req, res) => {
-  const result = await authService.registerUser(req.body);
-  return response.created(res, result, 'Registration successful');
+export const register = catchAsync(async (req, res) => {
+  const { name, email, password, role } = req.body;
+  const user = await registerUser({ name, email, password, role });
+  res.status(201).json({ user });
 });
 
-exports.login = asyncHandler(async (req, res) => {
-  const result = await authService.loginUser(req.body);
-  return response.success(res, result, 'Login successful');
+export const login = catchAsync(async (req, res) => {
+  const { email, password } = req.body;
+  const { user, tokens } = await loginUser({ email, password });
+  setRefreshCookie(res, tokens.refreshToken);
+  res.json({ user, accessToken: tokens.accessToken });
 });
 
-exports.refresh = asyncHandler(async (req, res) => {
-  const result = await authService.refreshSession(req.body.refreshToken);
-  return response.success(res, result, 'Token refreshed');
-});
-
-exports.logout = asyncHandler(async (req, res) => {
-  const { jti } = req.user || {};
-  await authService.logoutUser(req.user.id, jti);
-  return response.success(res, null, 'Logged out');
-});
-
-exports.profile = asyncHandler(async (req, res) => {
-  const user = await authService.getCurrentUser(req.user.id);
-  return response.success(res, user, 'Profile fetched');
+export const refresh = catchAsync(async (req, res) => {
+  const token = req.cookies?.refreshToken;
+  if (!token) {
+    return res.status(401).json({ message: 'Missing refresh token' });
+  }
+  const { accessToken, refreshToken } = await refreshTokens(token);
+  setRefreshCookie(res, refreshToken);
+  res.json({ accessToken });
 });
 

@@ -1,39 +1,37 @@
-// backend/src/utils/token.js
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
+import { redis } from '../config/redis.js';
+import { randomUUID } from 'crypto';
 
-const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
-const config = require('../config/env');
-const { parseDurationToSeconds } = require('./helpers');
-const { redisClient } = require('../config/redis');
+const REFRESH_PREFIX = 'refresh-token:';
 
-const ACCESS_BLACKLIST_PREFIX = 'blacklist:';
+export const signAccessToken = (payload) =>
+  jwt.sign(payload, env.jwtAccessSecret, { expiresIn: env.accessTokenTtl });
 
-const signToken = (payload, secret, expiresIn) => {
-  const jti = uuidv4();
-  const token = jwt.sign({ ...payload, jti }, secret, { expiresIn });
-  return { token, jti };
+export const signRefreshToken = async (payload) => {
+  const tokenId = randomUUID();
+  const token = jwt.sign({ ...payload, tokenId }, env.jwtRefreshSecret, {
+    expiresIn: env.refreshTokenTtl,
+  });
+  const key = `${REFRESH_PREFIX}${tokenId}`;
+  const ttlSeconds = 60 * 60 * 24 * 7;
+  await redis.set(key, JSON.stringify(payload), 'EX', ttlSeconds);
+  return token;
 };
 
-const generateAccessToken = (payload) => signToken(payload, config.auth.jwt.secret, config.auth.jwt.expiresIn);
-const generateRefreshToken = (payload) =>
-  signToken(payload, config.auth.refresh.secret, config.auth.refresh.expiresIn);
+export const verifyAccessToken = (token) => jwt.verify(token, env.jwtAccessSecret);
 
-const verifyAccessToken = (token) => jwt.verify(token, config.auth.jwt.secret);
-const verifyRefreshToken = (token) => jwt.verify(token, config.auth.refresh.secret);
-
-const blacklistAccessToken = async (jti) => {
-  const ttl = parseDurationToSeconds(config.auth.jwt.expiresIn, 3600);
-  await redisClient.set(`${ACCESS_BLACKLIST_PREFIX}${jti}`, '1', { EX: ttl });
+export const verifyRefreshToken = async (token) => {
+  const decoded = jwt.verify(token, env.jwtRefreshSecret);
+  const key = `${REFRESH_PREFIX}${decoded.tokenId}`;
+  const exists = await redis.get(key);
+  if (!exists) {
+    throw new Error('Refresh token revoked');
+  }
+  return decoded;
 };
 
-const isAccessTokenBlacklisted = (jti) => redisClient.get(`${ACCESS_BLACKLIST_PREFIX}${jti}`);
-
-module.exports = {
-  generateAccessToken,
-  generateRefreshToken,
-  verifyAccessToken,
-  verifyRefreshToken,
-  blacklistAccessToken,
-  isAccessTokenBlacklisted,
+export const revokeRefreshToken = async (tokenId) => {
+  await redis.del(`${REFRESH_PREFIX}${tokenId}`);
 };
 

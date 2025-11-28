@@ -1,211 +1,346 @@
-// backend/src/services/orderService.js
+import { randomUUID } from 'crypto';
+import { redis } from '../config/redis.js';
+import { Product } from '../models/Product.js';
+import { ORDER_STATES, Order } from '../models/Order.js';
+import { DeliveryPartner } from '../models/DeliveryPartner.js';
+import { Notification } from '../models/Notification.js';
+import { eventBus } from '../utils/eventBus.js';
+import { enqueueTask } from './taskService.js';
+import { sendTemplatedEmail } from './mailerService.js';
+import { env } from '../config/env.js';
 
-const mongoose = require('mongoose');
-const { Order, Product, Inventory, Payment } = require('../models');
-const { ORDER_STATUS, PAYMENT_METHODS, PAYMENT_STATUS, USER_ROLES } = require('../utils/constants');
-const { paginate, getPaginationMeta } = require('../utils/helpers');
+const CHECKOUT_PREFIX = 'checkout:';
+const LOCK_PREFIX = 'inventory-lock:';
 
-const buildMoney = (amount, currency = 'USD') => ({ amount, currency });
+const timelineEntry = (state, note, actor) => ({
+  state,
+  note,
+  actor: actor?.name || 'system',
+  actorRole: actor?.role || 'system',
+  timestamp: new Date(),
+});
 
-const createOrder = async (user, payload) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const { items, shippingAddress, paymentMethod } = payload;
+const orderTransitions = {
+  Pending: ['Accepted', 'Rejected', 'Cancelled'],
+  Accepted: ['Packed', 'Cancelled'],
+  Packed: ['Shipped'],
+  Shipped: ['Delivered'],
+};
 
-    if (!items || !items.length) {
-      const err = new Error('Order requires at least one item');
-      err.status = 400;
-      throw err;
-    }
-    if (!Object.values(PAYMENT_METHODS).includes(paymentMethod)) {
-      const err = new Error('Unsupported payment method');
-      err.status = 400;
-      throw err;
-    }
-
-    const orderItems = [];
-    let subtotal = 0;
-    const currency = 'USD';
-
-    for (const item of items) {
-      const product = await Product.findById(item.productId).session(session);
-      if (!product) {
-        const err = new Error('Product not found');
-        err.status = 404;
-        throw err;
-      }
-      if (!product.price || typeof product.price.amount !== 'number') {
-        const err = new Error(`Product ${product.name} missing price`);
-        err.status = 400;
-        throw err;
-      }
-
-      const inventory = await Inventory.findOne({ product: product._id }).session(session);
-      if (!inventory || inventory.availableQuantity < item.quantity) {
-        const err = new Error(`Insufficient inventory for ${product.name}`);
-        err.status = 400;
-        throw err;
-      }
-      inventory.reservedQuantity += item.quantity;
-      await inventory.save({ session });
-
-      const lineSubtotal = product.price.amount * item.quantity;
-      subtotal += lineSubtotal;
-
-      orderItems.push({
-        product: product._id,
-        farmer: product.farmer,
-        name: product.name,
-        sku: product.sku,
-        quantity: item.quantity,
-        unit: product.price.unit,
-        unitPrice: buildMoney(product.price.amount, product.price.currency || currency),
-        subtotal: buildMoney(lineSubtotal, product.price.currency || currency),
+const groupItemsByFarmer = (products, items) => {
+  const map = new Map();
+  items.forEach((item) => {
+    const product = products.find((p) => p.id === item.productId);
+    if (!product?.farmer) return;
+    const farmerId = product.farmer.id || product.farmer._id?.toString();
+    if (!farmerId) return;
+    if (!map.has(farmerId)) {
+      map.set(farmerId, {
+        farmer: {
+          id: farmerId,
+          name: product.farmer.name || 'Farmer',
+          email: product.farmer.email,
+        },
+        items: [],
       });
     }
-
-    const tax = buildMoney(0, currency);
-    const shippingFee = buildMoney(0, currency);
-    const total = buildMoney(subtotal + tax.amount + shippingFee.amount, currency);
-
-    const orderDoc = await Order.create(
-      [
-        {
-          consumer: user.id,
-          farmer: orderItems[0].farmer,
-          items: orderItems,
-          subtotal: buildMoney(subtotal, currency),
-          tax,
-          shippingFee,
-          total,
-          shippingAddress,
-          billingAddress: shippingAddress,
-          paymentStatus: PAYMENT_STATUS.PENDING,
-          status: ORDER_STATUS.PENDING,
-          timeline: [
-            {
-              stage: 'order_placed',
-              status: ORDER_STATUS.PENDING,
-              message: 'Order submitted by customer',
-              actor: user.id,
-            },
-          ],
-        },
-      ],
-      { session }
-    );
-
-    await Payment.create(
-      [
-        {
-          order: orderDoc[0]._id,
-          provider: 'stripe',
-          method: paymentMethod,
-          amount: total.amount,
-          currency: total.currency,
-          status: PAYMENT_STATUS.PENDING,
-        },
-      ],
-      { session }
-    );
-
-    await session.commitTransaction();
-    return Order.findById(orderDoc[0]._id).populate('items.product').populate('farmer').populate('consumer');
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
+    map.get(farmerId).items.push({
+      name: product.name,
+      quantity: item.quantity,
+      price: product.price,
+    });
+  });
+  return [...map.values()];
 };
 
-const buildOrderQueryForUser = (user, filters) => {
-  const query = {};
-  if (user.role === USER_ROLES.CONSUMER) {
-    query.consumer = user.id;
-  } else if (user.role === USER_ROLES.FARMER) {
-    query.farmer = user.profile;
-  }
-  if (filters.status) query.status = filters.status;
-  if (filters.farmer) query.farmer = filters.farmer;
-  return query;
+const sendCustomerStatusEmail = async (order, status, note) => {
+  if (!order.customer?.email) return;
+  await sendTemplatedEmail({
+    template: 'orderStatusUpdate',
+    to: order.customer.email,
+    data: {
+      customerName: order.customer.name,
+      status,
+      note,
+      orderId: order.id,
+    },
+  });
 };
 
-const listOrders = async (user, filters = {}, pagination = {}) => {
-  const query = buildOrderQueryForUser(user, filters);
-  const { skip, limit, page } = paginate(pagination.page, pagination.limit);
+const notifyFarmersOfOrder = async (farmerGroups, orderId) => {
+  await Promise.allSettled(
+    farmerGroups.map((group) =>
+      sendTemplatedEmail({
+        template: 'newOrderForFarmer',
+        to: group.farmer.email,
+        data: {
+          farmerName: group.farmer.name,
+          orderId,
+          items: group.items,
+        },
+      })
+    )
+  );
+};
 
-  const [items, total] = await Promise.all([
-    Order.find(query).populate('items.product').populate('farmer').populate('consumer').skip(skip).limit(limit).sort({ createdAt: -1 }),
-    Order.countDocuments(query),
+const notifyAdminOfOrder = async (order) => {
+  if (!env.adminAlertEmail) return;
+  await sendTemplatedEmail({
+    template: 'newOrderForFarmer',
+    to: env.adminAlertEmail,
+    data: {
+      farmerName: 'GreenHarvest Admin',
+      orderId: order.id,
+      items: order.items,
+    },
+  });
+};
+
+const sendOrderConfirmationEmail = async (order, total) => {
+  if (!order.customer?.email) return;
+  await sendTemplatedEmail({
+    template: 'orderConfirmation',
+    to: order.customer.email,
+    data: {
+      customerName: order.customer.name,
+      orderId: order.id,
+      total,
+      items: order.items,
+    },
+  });
+};
+
+
+export const createCheckout = async ({ customerId, items }) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    const err = new Error('Cart is empty');
+    err.status = 400;
+    throw err;
+  }
+  const productIds = items.map((i) => i.productId);
+  const products = await Product.find({ _id: { $in: productIds } });
+  if (products.length !== items.length) {
+    const err = new Error('Some products are missing');
+    err.status = 400;
+    throw err;
+  }
+  let total = 0;
+  items.forEach((item) => {
+    const product = products.find((p) => p.id === item.productId);
+    if (!product || product.stock < item.quantity) {
+      const err = new Error('Product out of stock');
+      err.status = 400;
+      throw err;
+    }
+    total += product.price * item.quantity;
+  });
+  const checkoutId = randomUUID();
+  const payload = JSON.stringify({
+    customerId,
+    items,
+    total,
+    createdAt: Date.now(),
+  });
+  await redis.set(`${CHECKOUT_PREFIX}${checkoutId}`, payload, 'EX', 300);
+  return { checkoutId, total };
+};
+
+const acquireLock = async (productId) => {
+  const key = `${LOCK_PREFIX}${productId}`;
+  const locked = await redis.set(key, '1', 'NX', 'EX', 5);
+  return locked === 'OK';
+};
+
+const releaseLock = async (productId) => {
+  await redis.del(`${LOCK_PREFIX}${productId}`);
+};
+
+export const finalizeCheckout = async ({ checkoutId, paymentReference }) => {
+  const cache = await redis.get(`${CHECKOUT_PREFIX}${checkoutId}`);
+  if (!cache) {
+    const err = new Error('Checkout expired');
+    err.status = 400;
+    throw err;
+  }
+  const { customerId, items, total } = JSON.parse(cache);
+  const productIds = items.map((i) => i.productId);
+  const products = await Product.find({ _id: { $in: productIds } }).populate('farmer');
+
+  try {
+    for (const item of items) {
+      const productMeta = products.find((p) => p.id === item.productId);
+      if (!productMeta) {
+        throw new Error('Product missing');
+      }
+      const locked = await acquireLock(productMeta.id);
+      if (!locked) {
+        throw new Error('Inventory lock busy');
+      }
+      try {
+        const freshProduct = await Product.findOneAndUpdate(
+          { _id: productMeta.id, stock: { $gte: item.quantity } },
+          { $inc: { stock: -item.quantity } },
+          { new: true }
+        );
+        if (!freshProduct) {
+          throw new Error('Insufficient stock');
+        }
+      } finally {
+        await releaseLock(productMeta.id);
+      }
+    }
+  } catch (err) {
+    await Promise.all(items.map((item) => releaseLock(item.productId)));
+    err.status = 409;
+    throw err;
+  }
+
+  const order = await Order.create({
+    customer: customerId,
+    items: items.map((item) => {
+      const product = products.find((p) => p.id === item.productId);
+      return {
+        product: product.id,
+        name: product.name,
+        quantity: item.quantity,
+        price: product.price,
+      };
+    }),
+    total,
+    paymentReference,
+    status: 'Pending',
+    timeline: [timelineEntry('Pending', 'Order placed and payment confirmed')],
+  });
+
+  await order.populate('customer', 'name email');
+
+  await redis.del(`${CHECKOUT_PREFIX}${checkoutId}`);
+
+  eventBus.emit('order:created', order);
+  enqueueTask('send_order_confirmation_email', {
+    orderId: order.id,
+    customerId: order.customer,
+    total,
+  });
+
+  const farmerGroups = groupItemsByFarmer(products, items);
+  await Promise.allSettled([
+    sendOrderConfirmationEmail(order, total),
+    notifyFarmersOfOrder(farmerGroups, order.id),
+    notifyAdminOfOrder(order),
   ]);
 
-  return {
-    items,
-    meta: getPaginationMeta(total, page, limit),
-  };
+  const lowStock = products.filter((p) => p.stock <= 2);
+  lowStock.forEach((product) =>
+    enqueueTask('notify_low_stock', {
+      productId: product.id,
+      stock: product.stock,
+    })
+  );
+
+  return order;
 };
 
-const getOrderById = async (user, id) => {
-  const order = await Order.findById(id).populate('items.product').populate('farmer').populate('consumer');
+export const getOrderTimeline = async (orderId, userId) => {
+  const order = await Order.findById(orderId).populate('deliveryPartner', 'name');
   if (!order) {
     const err = new Error('Order not found');
     err.status = 404;
     throw err;
   }
-  if (user.role === USER_ROLES.CONSUMER && order.consumer.toString() !== user.id) {
-    const err = new Error('Not authorized to view this order');
-    err.status = 403;
-    throw err;
-  }
-  if (user.role === USER_ROLES.FARMER && order.farmer.toString() !== user.profile?.toString()) {
-    const err = new Error('Not authorized to view this order');
+  if (order.customer.toString() !== userId.toString()) {
+    const err = new Error('Forbidden');
     err.status = 403;
     throw err;
   }
   return order;
 };
 
-const updateOrderStatus = async (user, id, payload) => {
-  const order = await Order.findById(id);
+const loadOrderWithRelations = (orderId) =>
+  Order.findById(orderId)
+    .populate({
+      path: 'items.product',
+      populate: { path: 'farmer', select: 'name email' },
+    })
+    .populate('customer', 'name email');
+
+export const advanceOrderStatus = async ({ orderId, nextState, note, actor }) => {
+  if (!ORDER_STATES.includes(nextState)) {
+    const err = new Error('Invalid order state');
+    err.status = 400;
+    throw err;
+  }
+
+  const order = await loadOrderWithRelations(orderId);
   if (!order) {
     const err = new Error('Order not found');
     err.status = 404;
     throw err;
   }
 
-  const allowed =
-    user.role === USER_ROLES.ADMIN ||
-    (user.role === USER_ROLES.FARMER && order.farmer.toString() === user.profile?.toString());
-  if (!allowed) {
-    const err = new Error('Not authorized to update this order');
-    err.status = 403;
-    throw err;
+  if (order.status === nextState) {
+    return order;
   }
 
-  if (!Object.values(ORDER_STATUS).includes(payload.status)) {
-    const err = new Error('Invalid order status');
-    err.status = 400;
-    throw err;
+  const actorRole = actor?.role || 'system';
+  if (actorRole !== 'admin') {
+    const allowed = orderTransitions[order.status] || [];
+    if (!allowed.includes(nextState)) {
+      const err = new Error('Transition not allowed');
+      err.status = 400;
+      throw err;
+    }
   }
 
-  order.status = payload.status;
-  order.timeline.push({
-    stage: payload.stage || 'updated',
-    status: payload.status,
-    message: payload.message,
-    actor: user.id,
-  });
+  if (actorRole === 'farmer') {
+    const ownsOrder = order.items.some(
+      (item) => item.product?.farmer?._id?.toString() === actor.id?.toString()
+    );
+    if (!ownsOrder) {
+      const err = new Error('You cannot update this order');
+      err.status = 403;
+      throw err;
+    }
+  }
 
-  await order.save();
-  return order.populate('items.product').populate('farmer').populate('consumer');
+  order.status = nextState;
+  order.timeline.push(timelineEntry(nextState, note, actor));
+  const saved = await order.save();
+  eventBus.emit('order:updated', saved);
+  await sendCustomerStatusEmail(saved, nextState, note);
+  return saved;
 };
 
-module.exports = {
-  createOrder,
-  listOrders,
-  getOrderById,
-  updateOrderStatus,
+export const assignDeliveryPartner = async (orderId) => {
+  const partners = await DeliveryPartner.find({ active: true }).sort({ assignments: 1 });
+  if (partners.length === 0) return null;
+  const partner = partners[0];
+  partner.assignments += 1;
+  await partner.save();
+  const order = await Order.findByIdAndUpdate(
+    orderId,
+    { deliveryPartner: partner.id },
+    { new: true }
+  );
+  await Notification.create({
+    user: order.customer,
+    message: `Delivery partner ${partner.name} assigned`,
+    type: 'delivery',
+  });
+  enqueueTask('notify_delivery_assignment', {
+    orderId: order.id,
+    deliveryPartner: partner.name,
+  });
+  return { order, partner };
+};
+
+export const listAllOrders = async () => {
+  const orders = await Order.find().sort({ createdAt: -1 }).limit(50);
+  return orders;
+};
+
+export const listOrdersForCustomer = async (customerId) => {
+  const orders = await Order.find({ customer: customerId }).sort({ createdAt: -1 });
+  return orders;
 };
 
