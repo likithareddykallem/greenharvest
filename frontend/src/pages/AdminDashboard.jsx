@@ -1,261 +1,184 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import client from '../api/client.js';
+import Chart from 'chart.js/auto';
 
-const AdminDashboard = () => {
+const PlatformGrowthChart = ({ stats }) => {
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+
+  useEffect(() => {
+    if (!stats || !canvasRef.current) return;
+    if (chartRef.current) chartRef.current.destroy();
+
+    const ctx = canvasRef.current.getContext('2d');
+    const labels = stats.ordersByStatus?.map(s => s._id) || [];
+    const data = stats.ordersByStatus?.map(s => s.count) || [];
+
+    chartRef.current = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Orders by Status',
+          data: data,
+          backgroundColor: 'rgba(16, 185, 129, 0.5)',
+          borderColor: 'rgb(16, 185, 129)',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: 'Order Distribution' }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    });
+
+    return () => chartRef.current?.destroy();
+  }, [stats]);
+
+  return <div style={{ height: 300, width: '100%' }}><canvas ref={canvasRef} /></div>;
+};
+
+export default function AdminDashboard() {
+  const [activeTab, setActiveTab] = useState('overview');
   const [users, setUsers] = useState([]);
   const [pendingProducts, setPendingProducts] = useState([]);
   const [stats, setStats] = useState(null);
-  const [orders, setOrders] = useState([]);
-  const [pendingFarmers, setPendingFarmers] = useState([]);
-  const [taxonomy, setTaxonomy] = useState({ categories: [], certifications: [] });
-  const [categoryForm, setCategoryForm] = useState({ label: '', description: '' });
-  const [certForm, setCertForm] = useState({ label: '', description: '' });
 
   const load = () => {
-    client.get('/api/admin/users').then((res) => setUsers(res.data));
-    client.get('/api/admin/stats').then((res) => setStats(res.data));
-    client.get('/api/products', { params: { limit: 50 } }).then((res) => {
-      setPendingProducts(res.data.items.filter((item) => item.approvals?.status === 'pending'));
+    client.get('/api/admin/users').then((r) => setUsers(r.data || []));
+    client.get('/api/admin/stats').then((r) => setStats(r.data || null));
+    client.get('/api/products', { params: { limit: 50 } }).then((r) => {
+      setPendingProducts((r.data?.items || []).filter((i) => i.approvals?.status === 'pending'));
     });
-    client.get('/api/orders').then((res) => setOrders(res.data || []));
-    client.get('/api/admin/farmers/pending').then((res) => setPendingFarmers(res.data));
-    Promise.all([
-      client.get('/api/admin/taxonomy', { params: { type: 'category' } }),
-      client.get('/api/admin/taxonomy', { params: { type: 'certification' } }),
-    ]).then(([catRes, certRes]) => setTaxonomy({ categories: catRes.data, certifications: certRes.data }));
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const approveProduct = (id) =>
-    client.post(`/api/products/${id}/approve`, { status: 'approved' }).then(() => load());
+  const approveProduct = (id) => client.post(`/api/products/${id}/approve`, { status: 'approved' }).then(load);
 
-  const rejectProduct = (id, adminNote) =>
-    client.post(`/api/products/${id}/approve`, { status: 'rejected', adminNote }).then(() => load());
-
-  const toggleUser = (id, active) =>
-    client.post(`/api/admin/users/${id}/active`, { active: !active }).then(() => load());
-
-  const updateOrderStatus = (id, state) =>
-    client.post(`/api/orders/${id}/status`, { state, note: `Set to ${state} by admin` }).then(() => load());
-
-  const handleFarmerDecision = (id, approved) =>
-    client.post(`/api/admin/farmers/${id}/approve`, { approved }).then(() => load());
-
-  const createTaxonomy = (type, payload) =>
-    client.post('/api/admin/taxonomy', { type, ...payload }).then(() => load());
+  const tabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'products', label: 'Pending Products' },
+    { id: 'users', label: 'Users' },
+  ];
 
   return (
-    <div className="container">
-      <div className="container-header">
-        <div>
-          <h2 className="container-title">Admin dashboard</h2>
-          <p className="container-subtitle">
-            Review products and certifications, manage users and keep orders flowing smoothly.
-          </p>
-        </div>
+    <div className="site-wrap">
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--brand)' }}>Admin Dashboard</h2>
+        <p style={{ color: 'var(--text-muted)' }}>Platform overview and management.</p>
       </div>
 
-      {stats && (
-        <div className="grid" style={{ marginBottom: '2rem' }}>
-          <div className="card">
-            <strong>Users</strong>
-            <span>
-              {stats.activeUsers} active / {stats.totalUsers} total
-            </span>
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--border)' }}>
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              padding: '0.75rem 1.5rem',
+              borderBottom: activeTab === tab.id ? '2px solid var(--brand)' : '2px solid transparent',
+              color: activeTab === tab.id ? 'var(--brand)' : 'var(--text-muted)',
+              fontWeight: 600,
+              background: 'none',
+              border: activeTab === tab.id ? undefined : 'none',
+              cursor: 'pointer'
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'overview' && stats && (
+        <div style={{ display: 'grid', gap: '2rem' }}>
+          <div className="card" style={{ padding: '2rem' }}>
+            <h3 style={{ marginBottom: '1.5rem', color: 'var(--brand)' }}>Platform Stats</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
+              <div style={{ padding: '1.5rem', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#166534' }}>{stats.totalUsers}</div>
+                <div style={{ color: '#15803d', fontWeight: 600 }}>Total Users</div>
+              </div>
+              <div style={{ padding: '1.5rem', background: '#eff6ff', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#1e40af' }}>{stats.totalProducts}</div>
+                <div style={{ color: '#1d4ed8', fontWeight: 600 }}>Total Products</div>
+              </div>
+              <div style={{ padding: '1.5rem', background: '#fff7ed', borderRadius: '12px', border: '1px solid #fed7aa' }}>
+                <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#9a3412' }}>{stats.pendingProducts}</div>
+                <div style={{ color: '#c2410c', fontWeight: 600 }}>Pending Approvals</div>
+              </div>
+            </div>
           </div>
-          <div className="card">
-            <strong>Products</strong>
-            <span>
-              {stats.approvedProducts} approved, {stats.pendingProducts} pending
-            </span>
-          </div>
-          <div className="card">
-            <strong>Orders by status</strong>
-            <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-              {(stats.ordersByStatus || [])
-                .map((o) => `${o._id}: ${o.count}`)
-                .join(' · ') || 'No orders yet'}
-            </span>
+          <div className="card" style={{ padding: '2rem' }}>
+            <PlatformGrowthChart stats={stats} />
           </div>
         </div>
       )}
 
-      <h3>Users</h3>
-      {users.map((user) => (
-        <div key={user._id} className="card">
-          <strong>{user.name}</strong> — {user.role}{' '}
-          <span style={{ fontSize: '0.85rem', color: user.active ? '#16a34a' : '#b91c1c' }}>
-            {user.active ? 'Active' : 'Deactivated'}
-          </span>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => toggleUser(user._id, user.active)}
-            style={{ marginLeft: 'auto' }}
-          >
-            {user.active ? 'Deactivate' : 'Activate'}
-          </button>
-        </div>
-      ))}
-
-      <h3>Pending products</h3>
-      {pendingProducts.length === 0 && <p>None</p>}
-      {pendingProducts.map((product) => (
-        <div key={product._id} className="card">
-          <strong>{product.name}</strong>
-          {product.imageUrl && (
-            <div style={{ margin: '0.5rem 0' }}>
-              <img
-                src={product.imageUrl}
-                alt={product.name}
-                style={{ maxWidth: '160px', borderRadius: '8px' }}
-              />
-            </div>
-          )}
-          {product.certifications?.length > 0 && (
-            <div style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-              <strong>Certifications</strong>
-              <ul style={{ paddingLeft: '1.25rem' }}>
-                {product.certifications.map((cert) => (
-                  <li key={cert.fileUrl}>
-                    <a href={cert.fileUrl} target="_blank" rel="noreferrer">
-                      {cert.fileName || cert.fileUrl}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-            <button type="button" className="btn-primary" onClick={() => approveProduct(product._id)}>
-              Approve
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => {
-                // lightweight prompt for now
-                // eslint-disable-next-line no-alert
-                const note = window.prompt('Reason for rejection?');
-                if (note) rejectProduct(product._id, note);
-              }}
-            >
-              Reject
-            </button>
+      {activeTab === 'products' && (
+        <div>
+          <h3 style={{ marginBottom: '1.5rem' }}>Pending Approvals</h3>
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {pendingProducts.map((p) => (
+              <div key={p._id} className="card" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                <div style={{ width: 80, height: 80, borderRadius: '12px', overflow: 'hidden', background: '#f1f5f9', flexShrink: 0, border: '1px solid var(--border)' }}>
+                  <img
+                    src={p.imageUrl || '/images/placeholder-veg.jpg'}
+                    alt={p.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--brand)' }}>{p.name}</div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                    Submitted by <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{p.farmer?.name}</span>
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{p.description}</div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => approveProduct(p._id)} className="btn-primary" style={{ padding: '0.5rem 1.5rem' }}>Approve</button>
+                </div>
+              </div>
+            ))}
+            {pendingProducts.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No pending products.</p>}
           </div>
         </div>
-      ))}
+      )}
 
-      <h3>Orders</h3>
-      {orders.map((order) => (
-        <div key={order._id} className="card">
-          <strong>Order #{order._id}</strong> — {order.status}
-          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {['Placed', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered'].map((state) => (
-              <button
-                key={state}
-                type="button"
-                className="btn-secondary"
-                disabled={order.status === state}
-                onClick={() => updateOrderStatus(order._id, state)}
-              >
-                {state}
-              </button>
+      {activeTab === 'users' && (
+        <div>
+          <h3>All Users</h3>
+          <div style={{ display: 'grid', gap: '1rem', marginTop: '1rem' }}>
+            {users.map((u) => (
+              <div key={u._id} className="card" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>{u.name}</div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{u.email}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: '999px',
+                    background: u.role === 'admin' ? '#fee2e2' : u.role === 'farmer' ? '#dcfce7' : '#f3f4f6',
+                    color: u.role === 'admin' ? '#991b1b' : u.role === 'farmer' ? '#166534' : '#374151',
+                    fontSize: '0.8rem',
+                    fontWeight: 500
+                  }}>
+                    {u.role}
+                  </span>
+                </div>
+              </div>
             ))}
           </div>
         </div>
-      ))}
-      <h3>Farmer applications</h3>
-      {pendingFarmers.length === 0 && <p>All farmers are approved.</p>}
-      {pendingFarmers.map((farmer) => (
-        <div key={farmer._id} className="card">
-          <strong>{farmer.name}</strong> — {farmer.email}
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-            <button type="button" className="btn-primary" onClick={() => handleFarmerDecision(farmer._id, true)}>
-              Approve
-            </button>
-            <button type="button" className="btn-secondary" onClick={() => handleFarmerDecision(farmer._id, false)}>
-              Request info
-            </button>
-          </div>
-        </div>
-      ))}
-
-      <h3>Categories & certifications</h3>
-      <div className="grid" style={{ marginBottom: '1.5rem' }}>
-        <form
-          className="card"
-          onSubmit={(event) => {
-            event.preventDefault();
-            createTaxonomy('category', categoryForm);
-            setCategoryForm({ label: '', description: '' });
-          }}
-        >
-          <strong>Add category</strong>
-          <input
-            placeholder="Label"
-            value={categoryForm.label}
-            onChange={(event) => setCategoryForm({ ...categoryForm, label: event.target.value })}
-            required
-          />
-          <textarea
-            placeholder="Description"
-            value={categoryForm.description}
-            onChange={(event) => setCategoryForm({ ...categoryForm, description: event.target.value })}
-          />
-          <button type="submit" className="btn-primary">
-            Save
-          </button>
-        </form>
-        <form
-          className="card"
-          onSubmit={(event) => {
-            event.preventDefault();
-            createTaxonomy('certification', certForm);
-            setCertForm({ label: '', description: '' });
-          }}
-        >
-          <strong>Add certification</strong>
-          <input
-            placeholder="Label"
-            value={certForm.label}
-            onChange={(event) => setCertForm({ ...certForm, label: event.target.value })}
-            required
-          />
-          <textarea
-            placeholder="Description"
-            value={certForm.description}
-            onChange={(event) => setCertForm({ ...certForm, description: event.target.value })}
-          />
-          <button type="submit" className="btn-primary">
-            Save
-          </button>
-        </form>
-      </div>
-      <div className="grid">
-        <div className="card">
-          <strong>Categories</strong>
-          <ul>
-            {taxonomy.categories.map((cat) => (
-              <li key={cat._id}>{cat.label}</li>
-            ))}
-          </ul>
-        </div>
-        <div className="card">
-          <strong>Certifications</strong>
-          <ul>
-            {taxonomy.certifications.map((cert) => (
-              <li key={cert._id}>{cert.label}</li>
-            ))}
-          </ul>
-        </div>
-      </div>
+      )}
     </div>
   );
-};
-
-export default AdminDashboard;
-
+}

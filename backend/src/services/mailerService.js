@@ -29,6 +29,7 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     html,
     text,
   };
+  console.log(`[mailer] Sending email to ${to} | Subject: ${subject}`);
   await transporter.sendMail(payload);
 };
 
@@ -40,6 +41,7 @@ export const sendTemplatedEmail = async ({ template, to, data }) => {
     console.warn(`[mailer] Failed to send ${template} email`, err);
   }
 };
+
 
 
 

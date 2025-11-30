@@ -1,13 +1,5 @@
 import { create } from 'zustand';
-import client from '../api/client.js';
-
-const setAuthHeader = (token) => {
-  if (token) {
-    client.defaults.headers.common.Authorization = `Bearer ${token}`;
-  } else {
-    delete client.defaults.headers.common.Authorization;
-  }
-};
+import client, { setAuthHeader } from '../api/client.js';
 
 export const useAuthStore = create((set) => ({
   user: null,
@@ -28,4 +20,3 @@ export const useAuthStore = create((set) => ({
   },
   register: async (payload) => client.post('/api/auth/register', payload),
 }));
-

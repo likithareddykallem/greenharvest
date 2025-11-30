@@ -12,6 +12,7 @@ import { env } from './config/env.js';
 import client from 'prom-client';
 
 const app = express();
+console.log('🚀 Backend loaded with volume mapping! 🚀');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,7 @@ client.collectDefaultMetrics({ register: metricsRegistry });
 app.use(helmet());
 app.use(
   cors({
-    origin: env.corsOrigin,
+    origin: true, // Allow any origin for development (fixes localhost:5174 vs 5173 issues)
     credentials: true,
   })
 );

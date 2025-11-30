@@ -29,7 +29,8 @@ const parseMultiValue = (value) => {
 export const getProducts = catchAsync(async (req, res) => {
   const page = Number(req.query.page) || 1;
   const limit = Number(req.query.limit) || 10;
-  const data = await listProducts({ page, limit });
+  const { search, category, certification } = req.query;
+  const data = await listProducts({ page, limit, search, category, certification });
   res.json(data);
 });
 

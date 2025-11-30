@@ -1,84 +1,104 @@
+// src/pages/FarmerOrdersPage.jsx
 import { useEffect, useState } from 'react';
 import client from '../api/client.js';
 
 const transitions = {
-  Pending: ['Accepted', 'Rejected', 'Cancelled'],
-  Accepted: ['Packed', 'Cancelled'],
+  Accepted: ['Packed'],
   Packed: ['Shipped'],
   Shipped: ['Delivered'],
 };
 
-const FarmerOrdersPage = () => {
+export default function FarmerOrdersPage() {
   const [orders, setOrders] = useState([]);
   const [updating, setUpdating] = useState('');
 
-  const refresh = () =>
-    client.get('/api/farmer/orders').then((res) => {
-      setOrders(res.data);
-    });
+  const refresh = () => client.get('/api/farmer/orders').then((res) => setOrders(res.data || []));
 
-  useEffect(() => {
-    refresh();
-  }, []);
+  useEffect(() => { refresh(); }, []);
 
   const updateStatus = (orderId, state) => {
     setUpdating(orderId + state);
-    return client
-      .post(`/api/farmer/orders/${orderId}/status`, { state, note: `Set to ${state}` })
+    return client.post(`/api/farmer/orders/${orderId}/status`, { state, note: `Set to ${state}` })
       .then(refresh)
+      .catch(err => alert('Failed to update status'))
       .finally(() => setUpdating(''));
   };
 
   return (
-    <div className="container">
-      <div className="container-header">
-        <div>
-          <h2 className="container-title">Order board</h2>
-          <p className="container-subtitle">
-            Review customer orders and keep customers updated as you accept, pack, and ship items.
-          </p>
-        </div>
+    <div className="site-wrap">
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--brand)' }}>Order Board</h2>
+        <p style={{ color: 'var(--text-muted)' }}>Manage and track your customer orders.</p>
       </div>
 
-      <div className="orders-grid">
+      <div style={{ display: 'grid', gap: '1.5rem' }}>
+        {orders.length === 0 && (
+          <div className="card" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            No orders found.
+          </div>
+        )}
+
         {orders.map((order) => (
-          <article className="card order-card" key={order._id}>
-            <header>
+          <article key={order._id} className="card" style={{ padding: '1.5rem' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
               <div>
-                <h3>Order #{order._id.slice(-6)}</h3>
-                <p>Customer: {order.customer?.name || 'Customer'}</p>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--brand)', margin: 0 }}>
+                  Order #{order._id.slice(-6)}
+                </h3>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Customer: <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{order.customer?.name || 'Guest'}</span>
+                </div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}
+                </div>
               </div>
-              <span className="status-pill">{order.status}</span>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{
+                  padding: '0.25rem 0.75rem',
+                  borderRadius: '999px',
+                  background: order.status === 'Delivered' ? '#dcfce7' : order.status === 'Cancelled' ? '#fee2e2' : '#e0f2fe',
+                  color: order.status === 'Delivered' ? '#166534' : order.status === 'Cancelled' ? '#991b1b' : '#0369a1',
+                  fontWeight: 600,
+                  fontSize: '0.85rem'
+                }}>
+                  {order.status}
+                </span>
+                {order.status === 'Pending' && (
+                  <div style={{ color: '#f59e0b', fontSize: '0.8rem', marginTop: '0.5rem', fontWeight: 500 }}>
+                    New Order - Pending Acceptance
+                  </div>
+                )}
+              </div>
             </header>
 
-            <ul>
-              {order.items.map((item) => (
-                <li key={`${order._id}-${item.product}`}>{item.name} × {item.quantity}</li>
-              ))}
-            </ul>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h4 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Items</h4>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {order.items.map((it, i) => (
+                  <li key={`${order._id}-${it.product?._id || it.product || i}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px dashed var(--border)' }}>
+                    <span>{it.name} <span style={{ color: 'var(--text-muted)' }}>× {it.quantity}</span></span>
+                    <span style={{ fontWeight: 600 }}>₹ {it.price * it.quantity}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-            <div className="status-actions">
-              {(transitions[order.status] || []).map((state) => (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {(transitions[order.status] || []).map((s) => (
                 <button
-                  key={state}
-                  type="button"
-                  className="btn-secondary"
-                  disabled={updating === order._id + state}
-                  onClick={() => updateStatus(order._id, state)}
+                  key={s}
+                  onClick={() => updateStatus(order._id, s)}
+                  disabled={!!updating}
+                  className={s === 'Cancelled' || s === 'Rejected' ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}
+                  style={s === 'Cancelled' || s === 'Rejected' ? { color: '#ef4444', borderColor: '#fee2e2', background: '#fef2f2' } : {}}
                 >
-                  {state}
+                  {updating === order._id + s ? 'Updating...' : s}
                 </button>
               ))}
             </div>
           </article>
         ))}
-
-        {orders.length === 0 && <p>No orders yet.</p>}
       </div>
     </div>
   );
-};
-
-export default FarmerOrdersPage;
-
-
+}

@@ -1,11 +1,11 @@
-version: '3.9'
+
 
 services:
   mongo:
     image: mongo:7
     restart: always
     ports:
-      - '27017:27017'
+      - '27018:27017'
     volumes:
       - mongo_data:/data/db
 
@@ -13,7 +13,7 @@ services:
     image: redis:7
     restart: always
     ports:
-      - '6379:6379'
+      - '6380:6379'
 
   backend:
     build:
@@ -27,6 +27,7 @@ services:
       - JWT_ACCESS_SECRET=super-secret-access
       - JWT_REFRESH_SECRET=super-secret-refresh
     volumes:
+      - ../backend/src:/app/src
       - ../backend/uploads:/app/uploads
     ports:
       - '4000:4000'

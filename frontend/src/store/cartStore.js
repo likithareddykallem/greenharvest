@@ -12,7 +12,16 @@ export const useCartStore = create((set, get) => ({
       });
     } else {
       set({
-        items: [...get().items, { productId: product._id, name: product.name, price: product.price, quantity }],
+        items: [
+          ...get().items,
+          {
+            productId: product._id,
+            name: product.name,
+            price: product.price,
+            quantity,
+            image: product.imageUrl || product.gallery?.[0] || '/images/placeholder-veg.jpg',
+          },
+        ],
       });
     }
   },

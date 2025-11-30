@@ -1,14 +1,35 @@
 import { Product } from '../models/Product.js';
 
-export const listProducts = async ({ page = 1, limit = 10 }) => {
+export const listProducts = async ({ page = 1, limit = 10, search, category, certification }) => {
   const skip = (page - 1) * limit;
+
+  const query = {
+    'approvals.approvedByAdmin': true,
+    status: 'published',
+  };
+
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { description: { $regex: search, $options: 'i' } },
+    ];
+  }
+
+  if (category) {
+    query.categories = category;
+  }
+
+  if (certification) {
+    query.certificationTags = certification;
+  }
+
   const [items, total] = await Promise.all([
-    Product.find({ 'approvals.approvedByAdmin': true, status: 'published' })
+    Product.find(query)
       .populate('farmer', 'name')
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 }),
-    Product.countDocuments({ 'approvals.approvedByAdmin': true, status: 'published' }),
+    Product.countDocuments(query),
   ]);
   return {
     items,

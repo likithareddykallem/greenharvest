@@ -208,8 +208,8 @@ export const finalizeCheckout = async ({ checkoutId, paymentReference }) => {
     }),
     total,
     paymentReference,
-    status: 'Pending',
-    timeline: [timelineEntry('Pending', 'Order placed and payment confirmed')],
+    status: 'Accepted',
+    timeline: [timelineEntry('Accepted', 'Order placed and payment confirmed')],
   });
 
   await order.populate('customer', 'name email');
@@ -308,6 +308,39 @@ export const advanceOrderStatus = async ({ orderId, nextState, note, actor }) =>
   const saved = await order.save();
   eventBus.emit('order:updated', saved);
   await sendCustomerStatusEmail(saved, nextState, note);
+  return saved;
+};
+
+export const cancelOrder = async ({ orderId, userId, note }) => {
+  const order = await loadOrderWithRelations(orderId);
+  if (!order) {
+    const err = new Error('Order not found');
+    err.status = 404;
+    throw err;
+  }
+
+  if (order.customer.id.toString() !== userId.toString()) {
+    const err = new Error('Forbidden');
+    err.status = 403;
+    throw err;
+  }
+
+  if (['Packed', 'Shipped', 'Delivered', 'Cancelled'].includes(order.status)) {
+    const err = new Error('Order cannot be cancelled at this stage');
+    err.status = 400;
+    throw err;
+  }
+
+  // Restock items
+  for (const item of order.items) {
+    await Product.findByIdAndUpdate(item.product.id, { $inc: { stock: item.quantity } });
+  }
+
+  order.status = 'Cancelled';
+  order.timeline.push(timelineEntry('Cancelled', note || 'Cancelled by customer', { id: userId, role: 'customer', name: 'Customer' }));
+  const saved = await order.save();
+  eventBus.emit('order:updated', saved);
+  await sendCustomerStatusEmail(saved, 'Cancelled', note);
   return saved;
 };
 

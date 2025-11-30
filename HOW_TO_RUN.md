@@ -7,63 +7,12 @@
 - Redis (if running manually)
 - Python 3.x (for Celery worker, if running manually)
 
-## Option 1: Docker Compose (Recommended - Easiest)
+## Option 0: One-Click Start (Windows)
 
-This method runs all services in containers.
-
-### Steps:
-1. **Start Docker Desktop** (if not already running)
-
-2. **Navigate to infra directory and start services:**
-   ```powershell
-   cd infra
-   docker compose up --build
-   ```
-
-3. **Seed the database** (in a new terminal):
-   ```powershell
-   node seed/index.js
-   ```
-
-4. **Access the application:**
-   - Frontend: http://localhost:5173
-   - Backend API: http://localhost:4000
-   - Prometheus: http://localhost:9090
-   - Grafana: http://localhost:3000
-
-### Default Login Credentials (after seeding):
-- Admin: `admin@greenharvest.io` / `AdminPass123!`
-- Farmer: `farmer1@gh.io` / `Farmer123!`
-- Customer: `alice@gh.io` / `Customer123!`
-
----
-
-## Option 2: Manual Setup (Development Mode)
-
-### Step 1: Install Dependencies
-
-```powershell
-# Install backend dependencies
-npm install --prefix backend
-
-# Install frontend dependencies
-npm install --prefix frontend
-
-# Install Python dependencies for Celery worker
-pip install -r celery_worker/requirements.txt
-```
-
-### Step 2: Start MongoDB and Redis
-
-**Option A: Using Docker (just for databases):**
-```powershell
-docker run -d -p 27017:27017 --name mongo mongo:7
-docker run -d -p 6379:6379 --name redis redis:7
-```
-
-**Option B: Install locally:**
-- Install MongoDB and start the service
-- Install Redis and start the service
+Simply double-click the `start_app.bat` file in the root directory.
+This script will:
+1.  Check dependencies.
+2.  Seed the database.
 
 ### Step 3: Configure Environment (Optional)
 
@@ -106,37 +55,6 @@ celery -A app.celery_app worker --loglevel=info
 In a new terminal:
 ```powershell
 node seed/index.js
-```
-
----
-
-## Quick Start Commands Summary
-
-### Docker Compose (Full Stack):
-```powershell
-cd infra
-docker compose up --build
-# Then in another terminal:
-node seed/index.js
-```
-
-### Manual Development:
-```powershell
-# Terminal 1
-cd backend
-npm run dev
-
-# Terminal 2
-cd frontend
-npm run dev
-
-# Terminal 3 (optional)
-cd celery_worker
-celery -A app.celery_app worker --loglevel=info
-
-# Terminal 4 (seed database)
-node seed/index.js
-```
 
 ---
 
@@ -174,6 +92,7 @@ docker compose down
 
 ### Manual Setup:
 Press `Ctrl+C` in each terminal running the services.
+
 
 
 

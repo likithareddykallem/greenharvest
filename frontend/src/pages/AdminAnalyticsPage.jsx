@@ -1,11 +1,10 @@
+// src/pages/AdminAnalyticsPage.jsx
 import { useEffect, useState } from 'react';
 import client from '../api/client.js';
 
-const grafanaUrl =
-  import.meta.env.VITE_GRAFANA_DASHBOARD_URL ||
-  'http://localhost:3000/d/greenharvest/overview?orgId=1&kiosk';
+const grafanaUrl = import.meta.env.VITE_GRAFANA_DASHBOARD_URL || 'http://localhost:3000/d/greenharvest/overview?orgId=1&kiosk';
 
-const AdminAnalyticsPage = () => {
+export default function AdminAnalyticsPage() {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
@@ -13,39 +12,31 @@ const AdminAnalyticsPage = () => {
   }, []);
 
   return (
-    <div className="container">
-      <div className="container-header">
-        <div>
-          <h2 className="container-title">Platform analytics</h2>
-          <p className="container-subtitle">Watch adoption, supply, and fulfillment KPIs.</p>
-        </div>
+    <div className="max-w-7xl mx-auto px-6 py-10">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold">Platform analytics</h2>
+        <p className="text-sm text-gray-600">Watch adoption, supply and fulfillment KPIs.</p>
       </div>
 
-      <div className="analytics-grid">
-        <div className="card">
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-white p-4 rounded shadow">
           <strong>Total users</strong>
-          <span>{stats?.totalUsers ?? '—'}</span>
+          <div>{stats?.totalUsers ?? '—'}</div>
         </div>
-        <div className="card">
+        <div className="bg-white p-4 rounded shadow">
           <strong>Active users</strong>
-          <span>{stats?.activeUsers ?? '—'}</span>
+          <div>{stats?.activeUsers ?? '—'}</div>
         </div>
-        <div className="card">
+        <div className="bg-white p-4 rounded shadow">
           <strong>Approved products</strong>
-          <span>{stats?.approvedProducts ?? '—'}</span>
+          <div>{stats?.approvedProducts ?? '—'}</div>
         </div>
       </div>
 
-      <div className="grafana-embed">
-        <iframe title="Grafana overview" src={grafanaUrl} loading="lazy" />
+      <div className="bg-white rounded shadow p-4">
+        <iframe title="Grafana overview" src={grafanaUrl} className="w-full h-96" loading="lazy" />
       </div>
     </div>
   );
-};
-
-export default AdminAnalyticsPage;
-
-
-
-
+}
 

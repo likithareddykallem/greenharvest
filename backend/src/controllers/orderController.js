@@ -7,6 +7,7 @@ import {
   assignDeliveryPartner,
   listAllOrders,
   listOrdersForCustomer,
+  cancelOrder,
 } from '../services/orderService.js';
 
 export const createCheckoutSession = catchAsync(async (req, res) => {
@@ -63,4 +64,11 @@ export const listCustomerOrders = catchAsync(async (req, res) => {
   const orders = await listOrdersForCustomer(req.user.id);
   res.json(orders);
 });
-
+export const cancelOrderController = catchAsync(async (req, res) => {
+  const order = await cancelOrder({
+    orderId: req.params.id,
+    userId: req.user.id,
+    note: req.body.note,
+  });
+  res.json(order);
+});

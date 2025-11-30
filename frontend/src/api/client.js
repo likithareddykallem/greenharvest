@@ -5,25 +5,28 @@ const client = axios.create({
   withCredentials: true,
 });
 
+export const setAuthHeader = (token) => {
+  if (token) client.defaults.headers.common.Authorization = `Bearer ${token}`;
+  else delete client.defaults.headers.common.Authorization;
+};
+
 client.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
+    const original = error.config;
     if (
       error.response?.status === 401 &&
-      !originalRequest?._retry &&
-      !originalRequest?.url?.includes('/api/auth/refresh')
+      !original?._retry &&
+      !original?.url?.includes('/api/auth/refresh')
     ) {
-      originalRequest._retry = true;
+      original._retry = true;
       try {
         const refreshResp = await client.post('/api/auth/refresh');
         const newToken = refreshResp.data?.accessToken;
-        if (newToken) {
-          client.defaults.headers.common.Authorization = `Bearer ${newToken}`;
-        }
-        return client(originalRequest);
-      } catch (refreshError) {
-        return Promise.reject(refreshError);
+        if (newToken) setAuthHeader(newToken);
+        return client(original);
+      } catch (err) {
+        return Promise.reject(err);
       }
     }
     return Promise.reject(error);
@@ -31,4 +34,3 @@ client.interceptors.response.use(
 );
 
 export default client;
-
