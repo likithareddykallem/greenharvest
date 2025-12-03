@@ -3,6 +3,7 @@ import { Product } from '../models/Product.js';
 import { Order } from '../models/Order.js';
 import { User } from '../models/User.js';
 import { advanceOrderStatus } from '../services/orderService.js';
+import { deleteProduct } from '../services/productService.js';
 
 export const listMyProducts = catchAsync(async (req, res) => {
   const products = await Product.find({ farmer: req.user.id });
@@ -123,3 +124,8 @@ export const updateFarmerOrderStatus = catchAsync(async (req, res) => {
   res.json(order);
 });
 
+
+export const deleteFarmerProduct = catchAsync(async (req, res) => {
+  await deleteProduct(req.params.id, req.user.id);
+  res.status(204).send();
+});

@@ -24,34 +24,76 @@ greenharvest/
 └─ .env.example          # environment template (copy → .env)
 ```
 
-## Getting Started (MVP first)
-1. **Install dependencies** (first run only)
-   ```bash
-   npm install --prefix backend
-   npm install --prefix frontend
-   pip install -r celery_worker/requirements.txt
-   ```
-2. **Configure environment**  
-   Copy `.env.example` to `.env` (backend/front share the same vars).
-3. **Boot the MVP stack**
-   ```bash
-   cd infra
-   docker compose up --build
-   ```
-   Backend: http://localhost:4000, Frontend: http://localhost:5173
-4. **Seed initial data**
-   ```bash
-   node seed/index.js
-   ```
-5. **Run backend tests**
-   ```bash
-   cd backend && npm test
-   ```
-6. **(Optional) Dev mode**
-   ```bash
-   npm run dev --prefix backend
-   npm run dev --prefix frontend
-   ```
+## Prerequisites
+- Node.js 18+
+- Docker & Docker Compose (optional, for containerized run)
+- MongoDB (if running locally without Docker)
+- Redis (if running locally without Docker)
+
+## Getting Started
+
+### Option 1: Quick Start with Docker (Recommended)
+This will spin up the entire stack including databases and monitoring tools.
+
+1.  **Configure Environment**
+    Copy `.env.example` to `.env` in the root directory.
+    ```bash
+    cp .env.example .env
+    ```
+
+2.  **Run with Docker Compose**
+    ```bash
+    cd infra
+    docker compose up --build
+    ```
+    -   Backend: http://localhost:4000
+    -   Frontend: http://localhost:5173
+    -   Grafana: http://localhost:3001
+
+3.  **Seed Data**
+    Open a new terminal and run:
+    ```bash
+    npm run seed
+    ```
+
+### Option 2: Manual Setup (Local Development)
+If you prefer to run services individually.
+
+1.  **Install Dependencies**
+    ```bash
+    # Root (optional, for scripts)
+    npm install
+
+    # Backend
+    cd backend
+    npm install
+
+    # Frontend
+    cd frontend
+    npm install
+    ```
+
+2.  **Start Databases**
+    Ensure MongoDB and Redis are running locally. Update `.env` with your local connection strings if they differ from defaults.
+
+3.  **Start Backend**
+    ```bash
+    cd backend
+    npm run dev
+    ```
+
+4.  **Start Frontend**
+    ```bash
+    cd frontend
+    npm run dev
+    ```
+
+5.  **Start Celery Worker (Optional)**
+    Requires Python installed.
+    ```bash
+    pip install -r celery_worker/requirements.txt
+    celery -A celery_worker.app.celery_app worker --loglevel=info
+    ```
 
 ## Environment Variables
 

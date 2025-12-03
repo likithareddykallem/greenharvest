@@ -3,9 +3,29 @@
 ## Prerequisites
 - Node.js (v18 or higher)
 - Docker Desktop (for Docker Compose method)
-- MongoDB (if running manually)
-- Redis (if running manually)
-- Python 3.x (for Celery worker, if running manually)
+
+## Setup (First Time Only)
+
+**Option 1: Automatic Setup (Windows)**
+Double-click the `setup.bat` file in the root directory. This will install all necessary libraries for you.
+
+**Option 2: Manual Setup**
+If you prefer to do it manually, run these commands:
+
+```bash
+# 1. Install root dependencies
+npm install
+
+# 2. Install backend dependencies
+cd backend
+npm install
+cd ..
+
+# 3. Install frontend dependencies
+cd frontend
+npm install
+cd ..
+```
 
 ## Option 0: One-Click Start (Windows)
 
@@ -61,6 +81,10 @@ node seed/index.js
 ## Troubleshooting
 
 ### Docker Issues:
+- **"context deadline exceeded" / "load metadata error"**:
+    -   **Cause**: Your internet or firewall is blocking Docker from downloading images.
+    -   **Fix**: Run `troubleshoot.bat` to diagnose.
+    -   **Solution**: Disconnect from VPN, try a mobile hotspot, or restart Docker Desktop.
 - **"Docker Desktop not running"**: Start Docker Desktop application
 - **Port conflicts**: Make sure ports 4000, 5173, 27017, 6379, 9090, 3000 are not in use
 - **Build errors**: Try `docker compose down` then `docker compose up --build`

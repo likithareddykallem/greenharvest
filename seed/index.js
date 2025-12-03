@@ -69,14 +69,14 @@ async function seed() {
   const customers = await Promise.all([
     User.create({
       name: 'Priya Sharma',
-      email: 'alice@gh.io',
+      email: 'priyasharma@gh.io',
       password: 'Customer123!',
       role: 'customer',
       approved: true,
     }),
     User.create({
       name: 'Rahul Verma',
-      email: 'bob@gh.io',
+      email: 'rahulverma@gh.io',
       password: 'Customer123!',
       role: 'customer',
       approved: true,

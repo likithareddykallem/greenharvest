@@ -4,6 +4,7 @@ import { Product } from '../models/Product.js';
 import { Order } from '../models/Order.js';
 import { Taxonomy } from '../models/Taxonomy.js';
 import { sendTemplatedEmail } from '../services/mailerService.js';
+import { listProducts } from '../services/productService.js';
 
 export const listUsers = catchAsync(async (req, res) => {
   const users = await User.find().select('-password').sort({ createdAt: -1 });
@@ -13,6 +14,16 @@ export const listUsers = catchAsync(async (req, res) => {
 export const listPendingFarmers = catchAsync(async (req, res) => {
   const farmers = await User.find({ role: 'farmer', approved: false }).select('-password');
   res.json(farmers);
+});
+
+export const listPendingProducts = catchAsync(async (req, res) => {
+  const result = await listProducts({
+    page: 1,
+    limit: 100,
+    status: 'pending',
+    approvedOnly: false,
+  });
+  res.json(result.items);
 });
 
 export const approveFarmer = catchAsync(async (req, res) => {

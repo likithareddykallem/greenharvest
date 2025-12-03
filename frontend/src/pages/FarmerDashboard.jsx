@@ -4,6 +4,10 @@ import client from '../api/client.js';
 import { currency } from '../utils/format.js';
 import Chart from 'chart.js/auto';
 
+
+
+
+
 const SalesChart = ({ orders }) => {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
@@ -88,7 +92,7 @@ export default function FarmerDashboard() {
   const [loading, setLoading] = useState(true);
 
   // Product Form
-  const [form, setForm] = useState({ name: '', description: '', price: '', stock: '' });
+  const [form, setForm] = useState({ name: '', price: '', stock: '', category: '' });
   const [image, setImage] = useState(null);
   const [certImage, setCertImage] = useState(null);
 
@@ -116,7 +120,8 @@ export default function FarmerDashboard() {
     e.preventDefault();
     const formData = new FormData();
     formData.append('name', form.name);
-    formData.append('description', form.description);
+
+
     formData.append('price', form.price);
     formData.append('stock', form.stock);
     formData.append('categories', form.category);
@@ -125,8 +130,8 @@ export default function FarmerDashboard() {
 
     try {
       await client.post('/api/products/farmer', formData);
-      setForm({ name: '', description: '', price: '', stock: '', category: '', image: null, certificationTags: [], certificationType: '', customCertification: '' });
-      setShowForm(false);
+      setForm({ name: '', price: '', stock: '', category: '', image: null, certificationTags: [], certificationType: '', customCertification: '' });
+
       load();
       alert('Product published successfully!');
     } catch (err) {
@@ -134,21 +139,11 @@ export default function FarmerDashboard() {
     }
   };
 
-  const updateOrderStatus = async (orderId, state) => {
-    try {
-      // Use the farmer-specific endpoint
-      await client.post(`/api/farmer/orders/${orderId}/status`, { state, note: `Marked as ${state}` });
-      load();
-    } catch (err) {
-      console.error(err);
-      alert('Failed to update status');
-    }
-  };
+
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'products', label: 'Products' },
-    { id: 'orders', label: 'Orders' },
   ];
 
   return (
@@ -219,13 +214,19 @@ export default function FarmerDashboard() {
                 required
                 style={{ width: '100%', padding: '0.5rem', border: '1px solid var(--border)', borderRadius: '4px' }}
               />
-              <textarea
-                placeholder="Description"
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              <select
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
                 required
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid var(--border)', borderRadius: '4px', minHeight: '100px' }}
-              />
+                style={{ width: '100%', padding: '0.5rem', border: '1px solid var(--border)', borderRadius: '4px' }}
+              >
+                <option value="">Select Category</option>
+                <option value="Leafy Greens">Leafy Greens</option>
+                <option value="Roots & Tubers">Roots & Tubers</option>
+                <option value="Fruits">Fruits</option>
+                <option value="Exotic">Exotic</option>
+                <option value="Flowers">Flowers</option>
+              </select>
               <div>
                 <label>Certifications</label>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
@@ -337,13 +338,26 @@ export default function FarmerDashboard() {
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => client.patch(`/api/farmer/products/${p._id}/inventory`, { stock: (p.stock || 0) + 1 }).then(load)}
-                    className="btn-secondary"
-                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
-                  >
-                    + Stock
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => client.patch(`/api/farmer/products/${p._id}/inventory`, { stock: (p.stock || 0) + 1 }).then(load)}
+                      className="btn-secondary"
+                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                    >
+                      + Stock
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Are you sure you want to delete this product?')) {
+                          client.delete(`/api/farmer/products/${p._id}`).then(load).catch(() => alert('Failed to delete product'));
+                        }
+                      }}
+                      className="btn-secondary"
+                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', color: '#ef4444', borderColor: '#fca5a5', background: '#fef2f2' }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
               {products.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No products yet.</p>}
@@ -352,51 +366,6 @@ export default function FarmerDashboard() {
         </div>
       )}
 
-      {activeTab === 'orders' && (
-        <div>
-          <h3>Recent Orders</h3>
-          <div style={{ display: 'grid', gap: '1rem', marginTop: '1rem' }}>
-            {orders.map(order => (
-              <div key={order._id} className="card" style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '1rem' }}>
-                  <div>
-                    <strong>Order #{order._id.slice(-6)}</strong>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{new Date(order.createdAt).toLocaleDateString()}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--brand)' }}>{order.status}</div>
-                    <div style={{ fontSize: '0.9rem' }}>Total: {currency(order.total)}</div>
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: '1rem' }}>
-                  {order.items.map((item, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
-                      <span>{item.name} <span style={{ color: 'var(--text-muted)' }}>x {item.quantity}</span></span>
-                      <span>{currency(item.price * item.quantity)}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '1rem' }}>
-                  {order.status === 'Accepted' && (
-                    <button onClick={() => updateOrderStatus(order._id, 'Packed')} className="btn-primary btn-sm">
-                      Mark as Packed
-                    </button>
-                  )}
-                  {order.status === 'Packed' && (
-                    <button onClick={() => updateOrderStatus(order._id, 'Shipped')} className="btn-primary btn-sm">
-                      Mark as Shipped
-                    </button>
-                  )}
-
-                </div>
-              </div>
-            ))}
-            {orders.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No orders yet.</p>}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

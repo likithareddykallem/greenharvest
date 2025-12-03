@@ -37,13 +37,17 @@ export const registerUser = async ({ name, email, password, role }) => {
 };
 
 export const loginUser = async ({ email, password }) => {
+  console.log(`Attempting login for ${email}`);
   const user = await User.findOne({ email }).select('+password');
   if (!user) {
+    console.log('User not found');
     const err = new Error('Invalid credentials');
     err.status = 401;
     throw err;
   }
+  console.log(`User found: ${user.email}, Role: ${user.role}, Approved: ${user.approved}`);
   const valid = await user.comparePassword(password);
+  console.log(`Password valid: ${valid}`);
   if (!valid) {
     const err = new Error('Invalid credentials');
     err.status = 401;

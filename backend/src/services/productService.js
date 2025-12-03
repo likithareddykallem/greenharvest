@@ -1,12 +1,18 @@
 import { Product } from '../models/Product.js';
 
-export const listProducts = async ({ page = 1, limit = 10, search, category, certification }) => {
+export const listProducts = async ({ page = 1, limit = 10, search, category, certification, status, approvedOnly = true }) => {
   const skip = (page - 1) * limit;
 
-  const query = {
-    'approvals.approvedByAdmin': true,
-    status: 'published',
-  };
+  const query = {};
+
+  if (approvedOnly) {
+    query['approvals.approvedByAdmin'] = true;
+    query.status = 'published';
+  }
+
+  if (status) {
+    query['approvals.status'] = status;
+  }
 
   if (search) {
     query.$or = [
@@ -150,3 +156,13 @@ export const resubmitFarmerProduct = async (productId, farmerId) => {
   return product;
 };
 
+
+export const deleteProduct = async (productId, farmerId) => {
+  const product = await Product.findOneAndDelete({ _id: productId, farmer: farmerId });
+  if (!product) {
+    const err = new Error('Product not found or unauthorized');
+    err.status = 404;
+    throw err;
+  }
+  return product;
+};

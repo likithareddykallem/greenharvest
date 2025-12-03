@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   listUsers,
   listPendingFarmers,
+  listPendingProducts,
   approveFarmer,
   approveProduct,
   toggleUserActive,
@@ -21,6 +22,7 @@ router.post('/users/:id/active', toggleUserActive);
 router.get('/stats', getAdminStats);
 router.get('/farmers/pending', listPendingFarmers);
 router.post('/farmers/:id/approve', approveFarmer);
+router.get('/products/pending', listPendingProducts);
 router.post('/products/:id/approve', approveProduct);
 router.get('/taxonomy', listTaxonomy);
 router.post('/taxonomy', createTaxonomy);
