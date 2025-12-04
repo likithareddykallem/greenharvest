@@ -79,20 +79,45 @@ export const updateFarmerProfile = catchAsync(async (req, res) => {
 });
 
 export const updateFarmerInventory = catchAsync(async (req, res) => {
-  const parsedStock = Number(req.body.stock);
-  if (Number.isNaN(parsedStock) || parsedStock < 0) {
-    const err = new Error('Invalid stock value');
+  const { stock, addedStock } = req.body;
+  const update = {};
+
+  if (addedStock !== undefined) {
+    const parsedAdded = Number(addedStock);
+    if (Number.isNaN(parsedAdded) || parsedAdded <= 0) {
+      const err = new Error('Invalid added stock value');
+      err.status = 400;
+      throw err;
+    }
+    update.$inc = { stock: parsedAdded };
+    // If we are adding stock, we ensure it's published if it was draft (optional, but good UX)
+    update.$inc = { stock: parsedAdded };
+    // Only auto-publish if it was draft or out of stock. Do not override rejected/pending.
+    // We can't easily check the current status here without a query, so we'll use a conditional update pipeline or just remove the auto-publish for now.
+    // Simpler: Let's just NOT set status to published here. The farmer can manually publish/resubmit.
+    // Or better: Use findOneAndUpdate with a pipeline? No, too complex.
+    // Let's just remove the auto-publish line. The user can toggle status separately.
+    // update.$set = { status: 'published' };
+  } else if (stock !== undefined) {
+    const parsedStock = Number(stock);
+    if (Number.isNaN(parsedStock) || parsedStock < 0) {
+      const err = new Error('Invalid stock value');
+      err.status = 400;
+      throw err;
+    }
+    update.$set = {
+      stock: parsedStock,
+      status: parsedStock > 0 ? 'published' : 'draft',
+    };
+  } else {
+    const err = new Error('Missing stock or addedStock');
     err.status = 400;
     throw err;
   }
+
   const product = await Product.findOneAndUpdate(
     { _id: req.params.id, farmer: req.user.id },
-    {
-      $set: {
-        stock: parsedStock,
-        status: parsedStock > 0 ? 'published' : 'draft',
-      },
-    },
+    update,
     { new: true }
   );
   res.json(product);

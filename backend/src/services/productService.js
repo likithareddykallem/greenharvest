@@ -1,4 +1,5 @@
 import { Product } from '../models/Product.js';
+import { sendTemplatedEmail } from './mailerService.js';
 
 export const listProducts = async ({ page = 1, limit = 10, search, category, certification, status, approvedOnly = true }) => {
   const skip = (page - 1) * limit;
@@ -103,7 +104,21 @@ export const approveProduct = async ({
       'approvals.reviewedBy': reviewerId,
     },
   };
-  const product = await Product.findByIdAndUpdate(productId, update, { new: true });
+  const product = await Product.findByIdAndUpdate(productId, update, { new: true }).populate('farmer', 'name email');
+
+  if (product?.farmer?.email) {
+    sendTemplatedEmail({
+      template: 'productDecision',
+      to: product.farmer.email,
+      data: {
+        farmerName: product.farmer.name,
+        productName: product.name,
+        status,
+        note: adminNote,
+      },
+    });
+  }
+
   return product;
 };
 

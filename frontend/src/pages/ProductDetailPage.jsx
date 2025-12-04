@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import client from '../api/client.js';
 import { useCartStore } from '../store/cartStore.js';
 import { useAuthStore } from '../store/authStore.js';
-import { currency } from '../utils/format.js';
+import { currency, getImageUrl } from '../utils/format.js';
 
 const fallbackImage = '/images/placeholder-veg.jpg';
 
@@ -24,7 +24,7 @@ const ProductDetailPage = () => {
     client.get(`/api/products/${id}`)
       .then((res) => {
         setProduct(res.data);
-        setActiveImage(res.data.imageUrl || res.data.gallery?.[0] || fallbackImage);
+        setActiveImage(getImageUrl(res.data.imageUrl || res.data.gallery?.[0]));
       })
       .catch(() => setProduct(null));
   }, [id]);
@@ -37,7 +37,7 @@ const ProductDetailPage = () => {
     </div>
   );
 
-  const gallery = [product.imageUrl, ...(product.gallery || [])].filter(Boolean);
+  const gallery = [product.imageUrl, ...(product.gallery || [])].filter(Boolean).map(getImageUrl);
 
   const handleAddToCart = () => {
     if (!user) {

@@ -1,7 +1,7 @@
 // src/pages/FarmerDashboard.jsx
 import { useEffect, useState, useRef } from 'react';
 import client from '../api/client.js';
-import { currency } from '../utils/format.js';
+import { currency, getImageUrl } from '../utils/format.js';
 import Chart from 'chart.js/auto';
 
 
@@ -84,6 +84,8 @@ const SalesChart = ({ orders }) => {
   return <div style={{ height: 300, width: '100%' }}><canvas ref={canvasRef} /></div>;
 };
 
+import ConfirmationModal from '../components/ConfirmationModal.jsx';
+
 export default function FarmerDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [products, setProducts] = useState([]);
@@ -95,6 +97,9 @@ export default function FarmerDashboard() {
   const [form, setForm] = useState({ name: '', price: '', stock: '', category: '' });
   const [image, setImage] = useState(null);
   const [certImage, setCertImage] = useState(null);
+
+  // Duplicate Modal State
+  const [duplicateModal, setDuplicateModal] = useState({ show: false, product: null, newStock: 0 });
 
   const load = async () => {
     setLoading(true);
@@ -125,8 +130,9 @@ export default function FarmerDashboard() {
     formData.append('price', form.price);
     formData.append('stock', form.stock);
     formData.append('categories', form.category);
-    if (form.image) formData.append('image', form.image);
-    if (form.certificationTags.length) formData.append('certificationTags', JSON.stringify(form.certificationTags));
+    if (image) formData.append('image', image);
+    if (certImage) formData.append('certifications', certImage);
+    if (form.certificationTags?.length) formData.append('certificationTags', JSON.stringify(form.certificationTags));
 
     try {
       await client.post('/api/products/farmer', formData);
@@ -135,11 +141,31 @@ export default function FarmerDashboard() {
       load();
       alert('Product published successfully!');
     } catch (err) {
-      alert('Failed to publish product');
+      if (err.response?.status === 409) {
+        setDuplicateModal({
+          show: true,
+          product: { id: err.response.data.productId, name: form.name },
+          newStock: Number(form.stock)
+        });
+      } else {
+        alert('Failed to publish product');
+      }
     }
   };
 
-
+  const handleRestockConfirm = async () => {
+    try {
+      await client.patch(`/api/farmer/products/${duplicateModal.product.id}/inventory`, {
+        addedStock: duplicateModal.newStock
+      });
+      setDuplicateModal({ show: false, product: null, newStock: 0 });
+      setForm({ name: '', price: '', stock: '', category: '', image: null, certificationTags: [], certificationType: '', customCertification: '' });
+      load();
+      alert('Stock updated successfully!');
+    } catch (err) {
+      alert('Failed to update stock');
+    }
+  };
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
@@ -148,6 +174,16 @@ export default function FarmerDashboard() {
 
   return (
     <div className="site-wrap">
+      <ConfirmationModal
+        isOpen={duplicateModal.show}
+        title="Product Already Exists"
+        message={`A product named "${duplicateModal.product?.name}" already exists. Do you want to add the new stock (${duplicateModal.newStock}) to the existing product instead?`}
+        confirmText="Yes, Add Stock"
+        cancelText="No, Cancel"
+        onConfirm={handleRestockConfirm}
+        onCancel={() => setDuplicateModal({ show: false, product: null, newStock: 0 })}
+      />
+
       <div style={{ marginBottom: '2rem' }}>
         <h2 style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--brand)' }}>Farmer Workspace</h2>
         <p style={{ color: 'var(--text-muted)' }}>Welcome back, {profile.name || 'Farmer'}</p>
@@ -328,7 +364,7 @@ export default function FarmerDashboard() {
                 <div key={p._id} className="card" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                     <div style={{ width: 48, height: 48, borderRadius: 8, overflow: 'hidden', background: '#f1f5f9' }}>
-                      {p.imageUrl && <img src={p.imageUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                      <img src={getImageUrl(p.imageUrl)} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
                     <div>
                       <div style={{ fontWeight: 600 }}>{p.name}</div>
@@ -340,7 +376,12 @@ export default function FarmerDashboard() {
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
-                      onClick={() => client.patch(`/api/farmer/products/${p._id}/inventory`, { stock: (p.stock || 0) + 1 }).then(load)}
+                      onClick={() => {
+                        const qty = prompt('How much stock to add?', '1');
+                        if (qty && !isNaN(qty) && Number(qty) > 0) {
+                          client.patch(`/api/farmer/products/${p._id}/inventory`, { addedStock: Number(qty) }).then(load);
+                        }
+                      }}
                       className="btn-secondary"
                       style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
                     >
@@ -357,6 +398,19 @@ export default function FarmerDashboard() {
                     >
                       Delete
                     </button>
+                    {p.approvals?.status === 'rejected' && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm('Resubmit this product for approval?')) {
+                            client.post(`/api/products/${p._id}/resubmit`).then(load).catch(() => alert('Failed to resubmit'));
+                          }
+                        }}
+                        className="btn-primary"
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem', background: '#f59e0b', borderColor: '#d97706' }}
+                      >
+                        Resubmit
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

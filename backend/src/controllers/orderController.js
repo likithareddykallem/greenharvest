@@ -4,7 +4,6 @@ import {
   finalizeCheckout,
   getOrderTimeline,
   advanceOrderStatus,
-  assignDeliveryPartner,
   listAllOrders,
   listOrdersForCustomer,
   cancelOrder,
@@ -34,8 +33,7 @@ export const markPacked = catchAsync(async (req, res) => {
     note: 'Farmer packed order',
     actor: actorFromRequest(req),
   });
-  const result = await assignDeliveryPartner(order.id);
-  res.json({ order, delivery: result?.partner });
+  res.json({ order });
 });
 
 export const updateOrderStatus = catchAsync(async (req, res) => {

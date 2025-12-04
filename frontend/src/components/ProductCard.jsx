@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore.js';
 import { useCartStore } from '../store/cartStore.js';
-import { currency } from '../utils/format.js';
+import { currency, getImageUrl } from '../utils/format.js';
 import { useToastStore } from '../store/toastStore.js';
 
 const ProductCard = ({ product }) => {
@@ -12,10 +12,8 @@ const ProductCard = ({ product }) => {
 
   console.log('ProductCard product:', product);
 
-  const image =
-    product?.imageUrl ||
-    product?.gallery?.[0] ||
-    '/images/placeholder-veg.jpg';
+  const image = getImageUrl(product?.imageUrl || product?.gallery?.[0]);
+  console.log(`Product: ${product.name}, ImageURL: ${image}`);
   const badges = product?.certificationTags?.slice(0, 2) || [];
 
   const handleAddToCart = (e) => {

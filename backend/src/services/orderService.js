@@ -2,10 +2,8 @@ import { randomUUID } from 'crypto';
 import { redis } from '../config/redis.js';
 import { Product } from '../models/Product.js';
 import { ORDER_STATES, Order } from '../models/Order.js';
-import { DeliveryPartner } from '../models/DeliveryPartner.js';
 import { Notification } from '../models/Notification.js';
 import { eventBus } from '../utils/eventBus.js';
-import { enqueueTask } from './taskService.js';
 import { sendTemplatedEmail } from './mailerService.js';
 import { env } from '../config/env.js';
 
@@ -110,6 +108,18 @@ const sendOrderConfirmationEmail = async (order, total) => {
   });
 };
 
+const sendLowStockEmail = async (product) => {
+  if (!product.farmer?.email) return;
+  await sendTemplatedEmail({
+    template: 'lowStock',
+    to: product.farmer.email,
+    data: {
+      farmerName: product.farmer.name || 'Farmer',
+      productName: product.name,
+      stock: product.stock,
+    },
+  });
+};
 
 export const createCheckout = async ({ customerId, items }) => {
   if (!Array.isArray(items) || items.length === 0) {
@@ -185,6 +195,8 @@ export const finalizeCheckout = async ({ checkoutId, paymentReference }) => {
         if (!freshProduct) {
           throw new Error('Insufficient stock');
         }
+        // Update local product instance for email data
+        productMeta.stock = freshProduct.stock;
       } finally {
         await releaseLock(productMeta.id);
       }
@@ -217,11 +229,6 @@ export const finalizeCheckout = async ({ checkoutId, paymentReference }) => {
   await redis.del(`${CHECKOUT_PREFIX}${checkoutId}`);
 
   eventBus.emit('order:created', order);
-  enqueueTask('send_order_confirmation_email', {
-    orderId: order.id,
-    customerId: order.customer,
-    total,
-  });
 
   const farmerGroups = groupItemsByFarmer(products, items);
   await Promise.allSettled([
@@ -230,19 +237,14 @@ export const finalizeCheckout = async ({ checkoutId, paymentReference }) => {
     notifyAdminOfOrder(order),
   ]);
 
-  const lowStock = products.filter((p) => p.stock <= 2);
-  lowStock.forEach((product) =>
-    enqueueTask('notify_low_stock', {
-      productId: product.id,
-      stock: product.stock,
-    })
-  );
+  const lowStock = products.filter((p) => p.stock <= 5);
+  lowStock.forEach((product) => sendLowStockEmail(product));
 
   return order;
 };
 
 export const getOrderTimeline = async (orderId, userId) => {
-  const order = await Order.findById(orderId).populate('deliveryPartner', 'name');
+  const order = await Order.findById(orderId);
   if (!order) {
     const err = new Error('Order not found');
     err.status = 404;
@@ -342,29 +344,6 @@ export const cancelOrder = async ({ orderId, userId, note }) => {
   eventBus.emit('order:updated', saved);
   await sendCustomerStatusEmail(saved, 'Cancelled', note);
   return saved;
-};
-
-export const assignDeliveryPartner = async (orderId) => {
-  const partners = await DeliveryPartner.find({ active: true }).sort({ assignments: 1 });
-  if (partners.length === 0) return null;
-  const partner = partners[0];
-  partner.assignments += 1;
-  await partner.save();
-  const order = await Order.findByIdAndUpdate(
-    orderId,
-    { deliveryPartner: partner.id },
-    { new: true }
-  );
-  await Notification.create({
-    user: order.customer,
-    message: `Delivery partner ${partner.name} assigned`,
-    type: 'delivery',
-  });
-  enqueueTask('notify_delivery_assignment', {
-    orderId: order.id,
-    deliveryPartner: partner.name,
-  });
-  return { order, partner };
 };
 
 export const listAllOrders = async () => {

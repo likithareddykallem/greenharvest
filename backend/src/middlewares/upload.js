@@ -6,7 +6,8 @@ import { env } from '../config/env.js';
 // Local disk storage; swap with S3 adapter (e.g., @aws-sdk/client-s3) in production.
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = env.uploadDir;
+    const dir = path.isAbsolute(env.uploadDir) ? env.uploadDir : path.join(process.cwd(), env.uploadDir);
+    console.log('Upload Destination (Resolved):', dir);
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },

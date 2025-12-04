@@ -35,7 +35,6 @@ const orderSchema = new mongoose.Schema(
     },
     paymentReference: String,
     timeline: [timelineSchema],
-    deliveryPartner: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryPartner' },
   },
   { timestamps: true }
 );

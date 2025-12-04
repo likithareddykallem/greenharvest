@@ -20,7 +20,9 @@ const __dirname = path.dirname(__filename);
 const metricsRegistry = new client.Registry();
 client.collectDefaultMetrics({ register: metricsRegistry });
 
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
 app.use(
   cors({
     origin: true, // Allow any origin for development (fixes localhost:5174 vs 5173 issues)
@@ -32,7 +34,14 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(morgan('dev'));
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+const staticPath = path.join(__dirname, '..', 'uploads');
+console.log('Serving static files from:', staticPath);
+app.use('/uploads', (req, res, next) => {
+  console.log('Static Request:', req.url);
+  next();
+}, express.static(staticPath));
+
+
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });

@@ -24,7 +24,7 @@ export const registerUser = async ({ name, email, password, role }) => {
     email,
     password,
     role: role || 'customer',
-    approved: role === 'farmer' ? false : true,
+    approved: true,
   });
 
   sendTemplatedEmail({
@@ -51,11 +51,6 @@ export const loginUser = async ({ email, password }) => {
   if (!valid) {
     const err = new Error('Invalid credentials');
     err.status = 401;
-    throw err;
-  }
-  if (user.role === 'farmer' && !user.approved) {
-    const err = new Error('Farmer pending approval');
-    err.status = 403;
     throw err;
   }
 

@@ -9,7 +9,7 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true },
     password: { type: String, required: true },
     role: { type: String, enum: roles, default: 'customer' },
-    approved: { type: Boolean, default: false },
+    approved: { type: Boolean, default: true },
     active: { type: Boolean, default: true },
     profile: {
       farmName: { type: String },

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getImageUrl } from '../utils/format.js';
 
 export const useCartStore = create((set, get) => ({
   items: [],
@@ -19,7 +20,7 @@ export const useCartStore = create((set, get) => ({
             name: product.name,
             price: product.price,
             quantity,
-            image: product.imageUrl || product.gallery?.[0] || '/images/placeholder-veg.jpg',
+            image: getImageUrl(product.imageUrl || product.gallery?.[0]),
           },
         ],
       });

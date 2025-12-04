@@ -38,7 +38,7 @@ const templates = {
   welcome: ({ name, role }) => {
     const roleCopy =
       role === 'farmer'
-        ? 'Your application is pending admin review. We will notify you as soon as it is approved.'
+        ? 'Your account is ready! You can start adding products to your inventory immediately.'
         : 'You can browse the catalog, build a cart, and check out in minutes.';
     return {
       subject: 'Welcome to GreenHarvest',
@@ -106,6 +106,26 @@ const templates = {
     text: approved
       ? 'Your farmer profile is approved.'
       : 'We need more information before approving your farmer profile.',
+  }),
+  lowStock: ({ farmerName, productName, stock }) => ({
+    subject: `Low Stock Alert: ${productName}`,
+    html: container(
+      `Heads up, ${farmerName}!`,
+      `<p>Your product <strong>${productName}</strong> is running low on stock.</p>
+       <p>Current Stock: <strong>${stock}</strong></p>
+       <p>Please restock soon to keep selling.</p>`
+    ),
+    text: `Low stock alert for ${productName}. Current stock: ${stock}.`,
+  }),
+  productDecision: ({ farmerName, productName, status, note }) => ({
+    subject: `Product Update: ${productName} was ${status}`,
+    html: container(
+      `Hi ${farmerName},`,
+      `<p>Your product <strong>${productName}</strong> has been <strong>${status}</strong> by our admin team.</p>
+       ${note ? `<p><strong>Admin Note:</strong> ${note}</p>` : ''}
+       ${status === 'approved' ? '<p>It is now live in the marketplace!</p>' : '<p>Please check the note and resubmit if needed.</p>'}`
+    ),
+    text: `Product ${productName} was ${status}. ${note || ''}`,
   }),
 };
 

@@ -8,6 +8,7 @@ import {
   resubmitFarmerProduct,
 } from '../services/productService.js';
 import { Taxonomy } from '../models/Taxonomy.js';
+import { Product } from '../models/Product.js';
 
 const parseMultiValue = (value) => {
   if (!value) return undefined;
@@ -40,7 +41,26 @@ export const getProductById = catchAsync(async (req, res) => {
 });
 
 export const createFarmerProduct = catchAsync(async (req, res) => {
+  console.log('Creating product. Headers:', req.headers['content-type']);
+  console.log('Creating product. Body:', req.body);
+  console.log('Files:', req.files);
   const { name, description, price, stock, metadata } = req.body;
+
+  // Check for duplicate product
+  console.log(`Checking duplicate for: "${name}" (User: ${req.user.id})`);
+  const existingProduct = await Product.findOne({
+    farmer: req.user.id,
+    name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }, // Case-insensitive check
+  });
+
+  if (existingProduct) {
+    return res.status(409).json({
+      message: 'Product already exists',
+      productId: existingProduct._id,
+    });
+  }
+
+
   const imageFile = req.files?.image?.[0];
   const certFiles = req.files?.certifications || [];
   const galleryFiles = req.files?.gallery || [];

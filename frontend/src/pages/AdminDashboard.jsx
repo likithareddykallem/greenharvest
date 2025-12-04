@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { getImageUrl } from '../utils/format.js';
 import client from '../api/client.js';
 
 
@@ -21,6 +22,13 @@ export default function AdminDashboard() {
   useEffect(() => { load(); }, []);
 
   const approveProduct = (id) => client.post(`/api/products/${id}/approve`, { status: 'approved' }).then(load);
+
+  const rejectProduct = (id) => {
+    const note = prompt('Enter reason for rejection:');
+    if (note !== null) {
+      client.post(`/api/products/${id}/approve`, { status: 'rejected', adminNote: note }).then(load);
+    }
+  };
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
@@ -87,7 +95,7 @@ export default function AdminDashboard() {
                 <div key={p._id} className="card" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                   <div style={{ width: 80, height: 80, borderRadius: '12px', overflow: 'hidden', background: '#f1f5f9', flexShrink: 0, border: '1px solid var(--border)' }}>
                     <img
-                      src={p.imageUrl || '/images/placeholder-veg.jpg'}
+                      src={getImageUrl(p.imageUrl)}
                       alt={p.name}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
@@ -100,6 +108,13 @@ export default function AdminDashboard() {
                     <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>{p.description}</div>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => rejectProduct(p._id)}
+                      className="btn-secondary"
+                      style={{ padding: '0.5rem 1.5rem', color: '#ef4444', borderColor: '#fca5a5', background: '#fef2f2' }}
+                    >
+                      Reject
+                    </button>
                     <button onClick={() => approveProduct(p._id)} className="btn-primary" style={{ padding: '0.5rem 1.5rem' }}>Approve</button>
                   </div>
                 </div>

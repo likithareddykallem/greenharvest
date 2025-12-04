@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import { User } from '../backend/src/models/User.js';
 import { Product } from '../backend/src/models/Product.js';
-import { DeliveryPartner } from '../backend/src/models/DeliveryPartner.js';
 import { Order } from '../backend/src/models/Order.js';
 import { env } from '../backend/src/config/env.js';
 import { connectMongo } from '../backend/src/config/mongo.js';
@@ -19,12 +18,6 @@ const productsSeed = [
   { name: 'Blueberries', description: 'Sweet and tangy fresh blueberries.', price: 400, stock: 25, categories: ['Fruits', 'Exotic'], certificationTags: ['Jaivik Bharat'], imageUrl: '/images/blueberry.webp' },
 ];
 
-const partnersSeed = [
-  { name: 'Dunzo', contact: 'support@dunzo.in', zone: 'metro' },
-  { name: 'Shadowfax', contact: 'hello@shadowfax.in', zone: 'pan-india' },
-  { name: 'Porter', contact: 'help@porter.in', zone: 'local' },
-];
-
 async function seed() {
   // Auto-switch to localhost:27018 if running locally (outside Docker)
   // We detect this by checking if we can resolve 'mongo' or if the default URI fails.
@@ -37,10 +30,16 @@ async function seed() {
   console.log('Connecting to Mongo at', env.mongoUri);
   await connectMongo();
 
-  await Promise.all([User.deleteMany(), Product.deleteMany(), DeliveryPartner.deleteMany(), Order.deleteMany()]);
-  await Taxonomy.deleteMany();
+  // await Promise.all([User.deleteMany(), Product.deleteMany(), Order.deleteMany()]);
+  // await Taxonomy.deleteMany();
 
-  const admin = await User.create({
+  const createUserIfMissing = async (userData) => {
+    const existing = await User.findOne({ email: userData.email });
+    if (existing) return existing;
+    return User.create(userData);
+  };
+
+  const admin = await createUserIfMissing({
     name: 'Admin',
     email: 'admin@greenharvest.io',
     password: 'AdminPass123!',
@@ -48,16 +47,15 @@ async function seed() {
     approved: true,
   });
 
-  // Use User.create so Mongoose password hashing runs (insertMany bypasses pre-save hooks)
   const farmers = await Promise.all([
-    User.create({
+    createUserIfMissing({
       name: 'Ramesh Kumar',
       email: 'farmer1@gh.io',
       password: 'Farmer123!',
       role: 'farmer',
       approved: true,
     }),
-    User.create({
+    createUserIfMissing({
       name: 'Suresh Patel',
       email: 'farmer2@gh.io',
       password: 'Farmer123!',
@@ -67,14 +65,14 @@ async function seed() {
   ]);
 
   const customers = await Promise.all([
-    User.create({
+    createUserIfMissing({
       name: 'Priya Sharma',
       email: 'priyasharma@gh.io',
       password: 'Customer123!',
       role: 'customer',
       approved: true,
     }),
-    User.create({
+    createUserIfMissing({
       name: 'Rahul Verma',
       email: 'rahulverma@gh.io',
       password: 'Customer123!',
@@ -83,52 +81,61 @@ async function seed() {
     }),
   ]);
 
-  const products = await Product.insertMany(
-    productsSeed.map((product, index) => ({
-      ...product,
-      farmer: farmers[index % farmers.length]._id,
-      approvals: { approvedByAdmin: true, status: 'approved' },
-      status: 'published',
-    }))
-  );
-
-  await DeliveryPartner.insertMany(partnersSeed);
-
-  await Taxonomy.insertMany([
-    { type: 'category', label: 'Leafy Greens', description: 'Spinach, Methi, Coriander' },
-    { type: 'category', label: 'Roots & Tubers', description: 'Potatoes, Carrots, Radish' },
-    { type: 'category', label: 'Fruits', description: 'Seasonal Indian fruits' },
-    { type: 'category', label: 'Exotic', description: 'Broccoli, Zucchini, Avocados' },
-    { type: 'category', label: 'Flowers', description: 'Marigold, Roses, Jasmine' },
-    { type: 'certification', label: 'Jaivik Bharat', description: 'India Organic Certification' },
-    { type: 'certification', label: 'NPOP', description: 'National Programme for Organic Production' },
-    { type: 'certification', label: 'PGS-India', description: 'Participatory Guarantee System' },
-    { type: 'certification', label: 'AGMARK', description: 'Agricultural Mark' },
-    { type: 'certification', label: 'FPO', description: 'Fruit Products Order' },
-  ]);
-
-  // Create dummy orders for analytics
-  const statuses = ['Accepted', 'Packed', 'Shipped', 'Delivered', 'Cancelled'];
-  const orders = [];
-
-  for (let i = 0; i < 20; i++) {
-    const status = statuses[i % statuses.length];
-    orders.push({
-      customer: customers[i % customers.length]._id,
-      items: [
-        { product: products[0]._id, name: products[0].name, quantity: 1, price: products[0].price },
-      ],
-      total: products[0].price,
-      paymentReference: `ORD-${1000 + i}`,
-      status: status,
-      createdAt: new Date(new Date().setDate(new Date().getDate() - i)), // Spread over last 20 days
-      timeline: [{ state: 'Pending', note: 'Order placed', timestamp: new Date() }]
-    });
+  // Only seed products if DB is empty of products to avoid duplicates or messing up user data
+  const productCount = await Product.countDocuments();
+  let products = [];
+  if (productCount === 0) {
+    products = await Product.insertMany(
+      productsSeed.map((product, index) => ({
+        ...product,
+        farmer: farmers[index % farmers.length]._id,
+        approvals: { approvedByAdmin: true, status: 'approved' },
+        status: 'published',
+      }))
+    );
+  } else {
+    products = await Product.find();
   }
 
-  await Order.insertMany(orders);
+  const taxonomyCount = await Taxonomy.countDocuments();
+  if (taxonomyCount === 0) {
+    await Taxonomy.insertMany([
+      { type: 'category', label: 'Leafy Greens', description: 'Spinach, Methi, Coriander' },
+      { type: 'category', label: 'Roots & Tubers', description: 'Potatoes, Carrots, Radish' },
+      { type: 'category', label: 'Fruits', description: 'Seasonal Indian fruits' },
+      { type: 'category', label: 'Exotic', description: 'Broccoli, Zucchini, Avocados' },
+      { type: 'category', label: 'Flowers', description: 'Marigold, Roses, Jasmine' },
+      { type: 'certification', label: 'Jaivik Bharat', description: 'India Organic Certification' },
+      { type: 'certification', label: 'NPOP', description: 'National Programme for Organic Production' },
+      { type: 'certification', label: 'PGS-India', description: 'Participatory Guarantee System' },
+      { type: 'certification', label: 'AGMARK', description: 'Agricultural Mark' },
+      { type: 'certification', label: 'FPO', description: 'Fruit Products Order' },
+    ]);
+  }
 
-  console.log('Seed completed. Admin login: admin@greenharvest.io / AdminPass123!');
+  // Only seed orders if we just seeded products (fresh DB)
+  if (productCount === 0) {
+    const statuses = ['Accepted', 'Packed', 'Shipped', 'Delivered', 'Cancelled'];
+    const orders = [];
+
+    for (let i = 0; i < 20; i++) {
+      const status = statuses[i % statuses.length];
+      orders.push({
+        customer: customers[i % customers.length]._id,
+        items: [
+          { product: products[0]._id, name: products[0].name, quantity: 1, price: products[0].price },
+        ],
+        total: products[0].price,
+        paymentReference: `ORD-${1000 + i}`,
+        status: status,
+        createdAt: new Date(new Date().setDate(new Date().getDate() - i)), // Spread over last 20 days
+        timeline: [{ state: 'Pending', note: 'Order placed', timestamp: new Date() }]
+      });
+    }
+    await Order.insertMany(orders);
+  }
+
+  console.log('Seed completed. Existing data was preserved.');
   await mongoose.disconnect();
 }
 
